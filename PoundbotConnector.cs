@@ -8,12 +8,12 @@ using UnityEngine;
 
 // using System.Text;
 // using System.Text.RegularExpressions;
-// using Oxide.Core.Libraries.Covalence;
+using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("PoundbotConnector", "MrPoundsign", "0.0.2")]
+    [Info("PoundbotConnector", "MrPoundsign", "0.0.3")]
     [Description("Communicate with Poundbot")]
 
     class PoundbotConnector : RustPlugin
@@ -22,6 +22,16 @@ namespace Oxide.Plugins
         {
             public string Error;
         }
+
+        class ChatMessage
+        {
+            public ulong SteamID { get; set; }
+            public string Username { get; set; }
+            public string Message { get; set; }
+            public string Source { get; set; }
+
+        }
+
         class EntityDeath
         {
             public string Name;
@@ -57,7 +67,8 @@ namespace Oxide.Plugins
 
         #region Configuration
 
-        protected override void LoadDefaultConfig() {
+        protected override void LoadDefaultConfig()
+        {
             Config.Clear();
             Config["api_url"] = "http://localhost:9090/";
             Config["show_own_damage"] = false;
@@ -90,7 +101,7 @@ namespace Oxide.Plugins
             {
                 var player = (BasePlayer) initiator;
                 if (entity.OwnerID == 0) return;
-                if (!(bool)Config["show_own_damage"] && entity.OwnerID == player.userID) return;
+                if (!(bool) Config["show_own_damage"] && entity.OwnerID == player.userID) return;
                 var priv = entity.GetBuildingPrivilege();
                 ulong[] owners;
                 if (priv != null)
@@ -108,20 +119,10 @@ namespace Oxide.Plugins
                 var di = new EntityDeath(name, GridPos(entity), owners);
                 var body = JsonConvert.SerializeObject(di);
 
-                // Puts($"{body}");
-                // return;
-
-                // webrequest.Enqueue("http://192.168.86.60:9090/entity_death", body, (code, response) =>
-                // webrequest.Enqueue($"{Config["api_url"]}entity_death", body, (code, response) =>
-                // {
-                //     Puts($"{code} {response}");
-
-                // }, this, RequestMethod.PUT, new Dictionary<string, string>
-                // { { "Content-type", "application/json" }
-                // }, 100f);
                 webrequest.Enqueue($"{Config["api_url"]}entity_death", body, (code, response) =>
                 {
-                    if (code != 200) {
+                    if (code != 200)
+                    {
                         Puts($"Error connecting to API {response}");
                     }
 
@@ -129,6 +130,55 @@ namespace Oxide.Plugins
                 { { "Content-type", "application/json" }
                 }, 100f);
             }
+        }
+
+        void OnServerInitialized()
+        {
+            timer.Repeat(1f, 0, () =>
+            {
+                webrequest.Enqueue($"{Config["api_url"]}chat", null, (code, response) =>
+                {
+                    switch (code)
+                    {
+                        case 200:
+                            ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
+                            if (message != null)
+                            {
+                                PrintToChat($"<color=red>{{DSCD}}</color> <color=orange>{message?.Username}</color>: {message?.Message}");
+                            }
+                            break;
+                        case 204:
+                            break;
+                        default:
+                            Puts($"Error connecting to API {response}");
+                            break;
+                    }
+
+                }, this, RequestMethod.GET, new Dictionary<string, string>
+                { { "Content-type", "application/json" }
+                }, 100f);
+            });
+        }
+
+        void OnBetterChat(Dictionary<string, object> data)
+        {
+            IPlayer player = (IPlayer) data["Player"];
+            var cm = new ChatMessage { };
+            cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
+            cm.Username = player.Name;
+            cm.Message = (string) data["Text"];
+            var body = JsonConvert.SerializeObject(cm);
+
+            webrequest.Enqueue($"{Config["api_url"]}chat", body, (code, response) =>
+            {
+                if (code != 200)
+                {
+                    Puts($"Error connecting to API {response}");
+                }
+
+            }, this, RequestMethod.PUT, new Dictionary<string, string>
+            { { "Content-type", "application/json" }
+            }, 100f);
         }
 
         #region Commands
