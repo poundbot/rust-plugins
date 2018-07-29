@@ -119,16 +119,15 @@ namespace Oxide.Plugins
                 var di = new EntityDeath(name, GridPos(entity), owners);
                 var body = JsonConvert.SerializeObject(di);
 
-                webrequest.Enqueue($"{Config["api_url"]}entity_death", body, (code, response) =>
-                {
-                    if (code != 200)
-                    {
-                        Puts($"Error connecting to API {response}");
-                    }
-
-                }, this, RequestMethod.PUT, new Dictionary<string, string>
-                { { "Content-type", "application/json" }
-                }, 100f);
+                webrequest.Enqueue(
+                    $"{Config["api_url"]}entity_death",
+                    body,
+                    (code, response) => { if (code != 200) { Puts($"Error connecting to API {response}"); } },
+                    this,
+                    RequestMethod.PUT,
+                    new Dictionary<string, string> { { "Content-type", "application/json" } },
+                    100f
+                );
             }
         }
 
@@ -136,27 +135,32 @@ namespace Oxide.Plugins
         {
             timer.Repeat(1f, 0, () =>
             {
-                webrequest.Enqueue($"{Config["api_url"]}chat", null, (code, response) =>
-                {
-                    switch (code)
+                webrequest.Enqueue(
+                    $"{Config["api_url"]}chat",
+                    null,
+                    (code, response) =>
                     {
-                        case 200:
-                            ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
-                            if (message != null)
-                            {
-                                PrintToChat($"<color=red>{{DSCD}}</color> <color=orange>{message?.Username}</color>: {message?.Message}");
-                            }
-                            break;
-                        case 204:
-                            break;
-                        default:
-                            Puts($"Error connecting to API {response}");
-                            break;
-                    }
+                        switch (code)
+                        {
+                            case 200:
+                                ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
+                                if (message != null)
+                                {
+                                    PrintToChat($"<color=red>{{DSCD}}</color> <color=orange>{message?.Username}</color>: {message?.Message}");
+                                }
+                                break;
+                            case 204:
+                                break;
+                            default:
+                                Puts($"Error connecting to API {response}");
+                                break;
+                        }
 
-                }, this, RequestMethod.GET, new Dictionary<string, string>
-                { { "Content-type", "application/json" }
-                }, 100f);
+                    }, this,
+                    RequestMethod.GET,
+                    new Dictionary<string, string> { { "Content-type", "application/json" } },
+                    100f
+                );
             });
         }
 
@@ -169,16 +173,15 @@ namespace Oxide.Plugins
             cm.Message = (string) data["Text"];
             var body = JsonConvert.SerializeObject(cm);
 
-            webrequest.Enqueue($"{Config["api_url"]}chat", body, (code, response) =>
-            {
-                if (code != 200)
-                {
-                    Puts($"Error connecting to API {response}");
-                }
-
-            }, this, RequestMethod.PUT, new Dictionary<string, string>
-            { { "Content-type", "application/json" }
-            }, 100f);
+            webrequest.Enqueue(
+                $"{Config["api_url"]}chat",
+                body,
+                (code, response) => { if (code != 200) { Puts($"Error connecting to API {response}"); } },
+                this,
+                RequestMethod.PUT,
+                new Dictionary<string, string> { { "Content-type", "application/json" } },
+                100f
+            );
         }
 
         #region Commands
@@ -198,21 +201,24 @@ namespace Oxide.Plugins
             Puts($"{body}");
             // return;
 
-            webrequest.Enqueue($"{Config["api_url"]}discord_auth", body, (code, response) =>
-            {
-                if (code == 200)
+            webrequest.Enqueue(
+                $"{Config["api_url"]}discord_auth",
+                body,
+                (code, response) =>
                 {
-                    PrintToChat(player, $"Enter the following PIN to the bot in discord: {da.Pin.ToString("D4")}");
-                }
-                else
-                {
-                    var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
-                    PrintToChat(player, error.Error);
-                }
+                    if (code == 200)
+                    {
+                        PrintToChat(player, $"Enter the following PIN to the bot in discord: {da.Pin.ToString("D4")}");
+                    }
+                    else
+                    {
+                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
+                        PrintToChat(player, error.Error);
+                    }
 
-            }, this, RequestMethod.PUT, new Dictionary<string, string>
-            { { "Content-type", "application/json" }
-            }, 100f);
+                }, this, RequestMethod.PUT, new Dictionary<string, string>
+                { { "Content-type", "application/json" }
+                }, 100f);
         }
 
         #endregion
