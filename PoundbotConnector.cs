@@ -2,22 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Oxide.Core;
 using Oxide.Core.Libraries;
-using UnityEngine;
-
-// using System.Text;
-// using System.Text.RegularExpressions;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
+using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("PoundbotConnector", "MrPoundsign", "0.0.3")]
+    [Info("PoundbotConnector", "MrPoundsign", "0.1.0")]
     [Description("Communicate with Poundbot")]
 
     class PoundbotConnector : RustPlugin
     {
+        [PluginReference]
+        Plugin Clans, BetterChat;
+
         class ApiErrorResponse
         {
             public string Error;
@@ -26,10 +27,10 @@ namespace Oxide.Plugins
         class ChatMessage
         {
             public ulong SteamID { get; set; }
-            public string Username { get; set; }
+            public string DisplayName { get; set; }
             public string Message { get; set; }
             public string Source { get; set; }
-
+            public string ClanTag { get; set; }
         }
 
         class EntityDeath
@@ -50,22 +51,28 @@ namespace Oxide.Plugins
 
         class DiscordAuth
         {
-            public string DiscordID;
             public ulong SteamID;
+            public string DisplayName;
+            public string ClanTag;
+            public string DiscordID;
             public int Pin;
             public DateTime CreatedAt;
 
-            public DiscordAuth(string name, ulong steamid)
+            public DiscordAuth(string displayname, string discordid, ulong steamid, string clantag)
             {
                 System.Random rnd = new System.Random();
-                this.DiscordID = name;
+                this.DisplayName = displayname;
+                this.DiscordID = discordid;
                 this.SteamID = steamid;
                 this.Pin = rnd.Next(1, 9999);
                 this.CreatedAt = DateTime.UtcNow;
+                this.ClanTag = clantag;
             }
         }
 
         #region Configuration
+
+        private List<Timer> chat_runners = new List<Timer>();
 
         protected override void LoadDefaultConfig()
         {
@@ -133,7 +140,86 @@ namespace Oxide.Plugins
 
         void OnServerInitialized()
         {
-            timer.Repeat(1f, 0, () =>
+            if (Clans != null)
+            {
+                var clan_tags = (JArray) Clans?.Call("GetAllClans");
+                List<JObject> clans = new List<JObject>();
+                foreach (string ctag in clan_tags)
+                {
+                    clans.Add((JObject) Clans?.Call("GetClan", ctag));
+                }
+                var body = JsonConvert.SerializeObject(clans);
+                Puts(body);
+                Puts("started");
+                webrequest.Enqueue(
+                    $"{Config["api_url"]}clans",
+                    body,
+                    (code, response) =>
+                    {
+                        if (code != 200)
+                        {
+                            var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
+                            Puts(error.Error);
+                        }
+
+                    }, this, RequestMethod.PUT, new Dictionary<string, string>
+                    { { "Content-type", "application/json" }
+                    }, 100f);
+            }
+
+            var runners_to_start = Enumerable.Range(1, 2);
+            foreach (int i in runners_to_start)
+            {
+                chat_runners.Add(startChatRunner());
+            }
+        }
+
+        void OnClanCreate(string tag)
+        {
+            var clan = (JObject) Clans?.Call("GetClan", tag);
+            var body = JsonConvert.SerializeObject(clan);
+            Puts(body);
+            Puts("started");
+            webrequest.Enqueue(
+                $"{Config["api_url"]}clans/{tag}",
+                body,
+                (code, response) =>
+                {
+                    if (code != 200)
+                    {
+                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
+                        Puts(error.Error);
+                    }
+
+                }, this, RequestMethod.PUT, new Dictionary<string, string>
+                { { "Content-type", "application/json" }
+                }, 100f);
+        }
+
+        void OnClanUpdate(string tag)
+        { OnClanCreate(tag); }
+
+        void OnClanDestroy(string tag)
+        {
+            webrequest.Enqueue(
+                $"{Config["api_url"]}clans/{tag}",
+                null,
+                (code, response) =>
+                {
+                    if (code != 200)
+                    {
+                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
+                        Puts(error.Error);
+                    }
+
+                }, this, RequestMethod.DELETE, new Dictionary<string, string>
+                { { "Content-type", "application/json" }
+                }, 100f);
+        }
+
+        private Timer startChatRunner()
+        {
+            return timer.Repeat(1f, 0, () =>
             {
                 webrequest.Enqueue(
                     $"{Config["api_url"]}chat",
@@ -146,7 +232,7 @@ namespace Oxide.Plugins
                                 ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
                                 if (message != null)
                                 {
-                                    PrintToChat($"<color=red>{{DSCD}}</color> <color=orange>{message?.Username}</color>: {message?.Message}");
+                                    PrintToChat($"<color=red>{{DSCD}}</color> <color=orange>{message?.DisplayName}</color>: {message?.Message}");
                                 }
                                 break;
                             case 204:
@@ -159,7 +245,7 @@ namespace Oxide.Plugins
                     }, this,
                     RequestMethod.GET,
                     new Dictionary<string, string> { { "Content-type", "application/json" } },
-                    100f
+                    1000f
                 );
             });
         }
@@ -169,8 +255,12 @@ namespace Oxide.Plugins
             IPlayer player = (IPlayer) data["Player"];
             var cm = new ChatMessage { };
             cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
-            cm.Username = player.Name;
+            cm.DisplayName = player.Name;
             cm.Message = (string) data["Text"];
+            if (Clans != null)
+            {
+                cm.ClanTag = (string) Clans?.Call("GetClanOf", Convert.ToUInt64(player.Id));
+            }
             var body = JsonConvert.SerializeObject(cm);
 
             webrequest.Enqueue(
@@ -178,7 +268,7 @@ namespace Oxide.Plugins
                 body,
                 (code, response) => { if (code != 200) { Puts($"Error connecting to API {response}"); } },
                 this,
-                RequestMethod.PUT,
+                RequestMethod.POST,
                 new Dictionary<string, string> { { "Content-type", "application/json" } },
                 100f
             );
@@ -194,12 +284,9 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var da = new DiscordAuth(args[0], player.userID);
+            var da = new DiscordAuth(player.displayName, args[0], player.userID, (string) Clans?.Call("GetClanOf", player.userID));
 
             var body = JsonConvert.SerializeObject(da);
-
-            Puts($"{body}");
-            // return;
 
             webrequest.Enqueue(
                 $"{Config["api_url"]}discord_auth",
