@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("PoundbotConnector", "MrPoundsign", "0.1.0")]
+    [Info("PoundbotConnector", "MrPoundsign", "0.1.1")]
     [Description("Communicate with Poundbot")]
 
     class PoundbotConnector : RustPlugin
@@ -149,8 +149,8 @@ namespace Oxide.Plugins
                     clans.Add((JObject) Clans?.Call("GetClan", ctag));
                 }
                 var body = JsonConvert.SerializeObject(clans);
-                Puts(body);
-                Puts("started");
+                
+                Puts("Sending clans data to Poundbot");
                 webrequest.Enqueue(
                     $"{Config["api_url"]}clans",
                     body,
@@ -178,8 +178,8 @@ namespace Oxide.Plugins
         {
             var clan = (JObject) Clans?.Call("GetClan", tag);
             var body = JsonConvert.SerializeObject(clan);
-            Puts(body);
-            Puts("started");
+            
+            Puts($"Sending clan {tag} to Poundbot");
             webrequest.Enqueue(
                 $"{Config["api_url"]}clans/{tag}",
                 body,
@@ -201,6 +201,7 @@ namespace Oxide.Plugins
 
         void OnClanDestroy(string tag)
         {
+            Puts($"Sending clan delete for {tag} to Poundbot");
             webrequest.Enqueue(
                 $"{Config["api_url"]}clans/{tag}",
                 null,
@@ -259,7 +260,7 @@ namespace Oxide.Plugins
             cm.Message = (string) data["Text"];
             if (Clans != null)
             {
-                cm.ClanTag = (string) Clans?.Call("GetClanOf", Convert.ToUInt64(player.Id));
+                cm.ClanTag = (string) Clans?.Call("GetClanOf", player.Id);
             }
             var body = JsonConvert.SerializeObject(cm);
 
