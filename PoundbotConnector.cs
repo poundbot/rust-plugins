@@ -115,9 +115,8 @@ namespace Oxide.Plugins
                     {
                         return;
                     }
-
-                    error = "Connection Failure!";
                 }
+                error = "Connection Failure!";
             }
             else
             {
