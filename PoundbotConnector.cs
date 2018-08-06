@@ -112,16 +112,11 @@ namespace Oxide.Plugins
                     LastApiAttempt = DateTime.Now;
                     ApiRetry = false;
                 }
-                else
+                else if (ApiRetryAttempts % ApiRetryNotify != 0)
                 {
                     return;
                 }
-                if (ApiRetryAttempts % ApiRetryNotify == 0)
-                {
-                    Puts("Connection Failed.");
-                    return;
-                }
-                return;
+                
                 error = "Connection Failure!";
             }
             else
