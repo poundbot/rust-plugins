@@ -111,17 +111,16 @@ namespace Oxide.Plugins
                 {
                     LastApiAttempt = DateTime.Now;
                     ApiRetry = false;
+                    if (ApiRetryAttempts % ApiRetryNotify != 0)
+                    {
+                        return;
+                    }
+
+                    error = "Connection Failure!";
                 }
-                else if (ApiRetryAttempts % ApiRetryNotify != 0)
-                {
-                    return;
-                }
-                
-                error = "Connection Failure!";
             }
             else
             {
-
                 try
                 {
                     var air = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
