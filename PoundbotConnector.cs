@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("PoundbotConnector", "MrPoundsign", "0.1.0")]
+    [Info("PoundbotConnector", "MrPoundsign", "0.1.1")]
     [Description("Communicate with Poundbot")]
 
     class PoundbotConnector : RustPlugin
@@ -111,7 +111,7 @@ namespace Oxide.Plugins
                 {
                     LastApiAttempt = DateTime.Now;
                     ApiRetry = false;
-                    if (ApiRetryAttempts % 5 == 0)
+                    if (ApiRetryAttempts % ApiRetryNotify == 0)
                     {
                         Puts("Connection Failed.");
                     }
