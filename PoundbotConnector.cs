@@ -11,13 +11,22 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("PoundbotConnector", "MrPoundsign", "0.1.1")]
+    [Info("PoundbotConnector", "MrPoundsign", "0.1.0")]
     [Description("Communicate with Poundbot")]
 
     class PoundbotConnector : RustPlugin
     {
         [PluginReference]
         Plugin Clans, BetterChat;
+
+        private int ApiRetrySeconds = 1;
+        private int ApiRetryNotify = 20;
+
+        private bool ApiInError = false;
+        private bool ApiRetry = false;
+        private uint ApiRetryAttempts = 0;
+        private DateTime ApiErrorTime;
+        private DateTime LastApiAttempt;
 
         class ApiErrorResponse
         {
@@ -71,6 +80,79 @@ namespace Oxide.Plugins
         }
 
         #region Configuration
+
+        private bool ApiRequestOk()
+        {
+            if (ApiInError && !ApiRetry && (LastApiAttempt.AddSeconds(ApiRetrySeconds) < DateTime.Now))
+            {
+                ApiRetryAttempts++;
+                if (ApiRetryAttempts == 1 || ApiRetryAttempts % ApiRetryNotify == 0)
+                {
+                    Puts($"Time in error: {DateTime.Now.Subtract(ApiErrorTime).ToShortString()}");
+                }
+                ApiRetry = true;
+            }
+            return (!ApiInError || ApiRetry);
+        }
+
+        private void ApiError(int code, string response)
+        {
+            string error;
+            if (code == 0)
+            {
+                if (!ApiInError)
+                {
+                    ApiErrorTime = DateTime.Now;
+                    LastApiAttempt = DateTime.Now;
+                    ApiInError = true;
+                    ApiRetry = false;
+                }
+                else if (ApiRetry)
+                {
+                    LastApiAttempt = DateTime.Now;
+                    ApiRetry = false;
+                    if (ApiRetryAttempts % 5 == 0)
+                    {
+                        Puts("Connection Failed.");
+                    }
+                    return;
+                }
+                else
+                {
+                    return;
+                }
+                error = "Connection Failure!";
+            }
+            else
+            {
+
+                try
+                {
+                    var air = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
+                    error = air.Error;
+                }
+                catch
+                {
+                    error = response;
+                }
+            }
+            Puts($"Error communicating with PoundBot: {code}/{error}");
+
+        }
+
+        private bool ApiSuccess(bool success)
+        {
+            // Reset retry varibles if we're successful
+            if (ApiInError && success)
+            {
+                Puts("Reconnected with PoundBot!");
+                Puts($"Total time in error: {DateTime.Now.Subtract(ApiErrorTime).ToShortString()}");
+                ApiRetryAttempts = 0;
+                ApiInError = false;
+                ApiRetry = true;
+            }
+            return success;
+        }
 
         private List<Timer> chat_runners = new List<Timer>();
 
@@ -126,15 +208,21 @@ namespace Oxide.Plugins
                 var di = new EntityDeath(name, GridPos(entity), owners);
                 var body = JsonConvert.SerializeObject(di);
 
-                webrequest.Enqueue(
-                    $"{Config["api_url"]}entity_death",
-                    body,
-                    (code, response) => { if (code != 200) { Puts($"Error connecting to API {response}"); } },
-                    this,
-                    RequestMethod.PUT,
-                    new Dictionary<string, string> { { "Content-type", "application/json" } },
-                    100f
-                );
+                if (ApiRequestOk())
+                {
+                    webrequest.Enqueue(
+                        $"{Config["api_url"]}entity_death",
+                        body,
+                        (code, response) =>
+                        {
+                            if (!ApiSuccess(code == 200)) { ApiError(code, response); }
+                        },
+                        this,
+                        RequestMethod.PUT,
+                        new Dictionary<string, string> { { "Content-type", "application/json" } },
+                        100f
+                    );
+                }
             }
         }
 
@@ -149,17 +237,16 @@ namespace Oxide.Plugins
                     clans.Add((JObject) Clans?.Call("GetClan", ctag));
                 }
                 var body = JsonConvert.SerializeObject(clans);
-                
+
                 Puts("Sending clans data to Poundbot");
                 webrequest.Enqueue(
                     $"{Config["api_url"]}clans",
                     body,
                     (code, response) =>
                     {
-                        if (code != 200)
+                        if (!ApiSuccess(code == 200))
                         {
-                            var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
-                            Puts(error.Error);
+                            ApiError(code, response);
                         }
 
                     }, this, RequestMethod.PUT, new Dictionary<string, string>
@@ -178,135 +265,153 @@ namespace Oxide.Plugins
         {
             var clan = (JObject) Clans?.Call("GetClan", tag);
             var body = JsonConvert.SerializeObject(clan);
-            
-            Puts($"Sending clan {tag} to Poundbot");
-            webrequest.Enqueue(
-                $"{Config["api_url"]}clans/{tag}",
-                body,
-                (code, response) =>
-                {
-                    if (code != 200)
-                    {
-                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
-                        Puts(error.Error);
-                    }
 
-                }, this, RequestMethod.PUT, new Dictionary<string, string>
-                { { "Content-type", "application/json" }
-                }, 100f);
+            if (ApiRequestOk())
+            {
+                Puts($"Sending clan {tag} to Poundbot");
+                webrequest.Enqueue(
+                    $"{Config["api_url"]}clans/{tag}",
+                    body,
+                    (code, response) =>
+                    {
+                        if (!ApiSuccess(code == 200))
+                        {
+                            ApiError(code, response);
+                        }
+
+                    }, this, RequestMethod.PUT, new Dictionary<string, string>
+                    { { "Content-type", "application/json" }
+                    }, 100f);
+            }
         }
 
-        void OnClanUpdate(string tag)
-        { OnClanCreate(tag); }
+        void OnClanUpdate(string tag) { OnClanCreate(tag); }
 
         void OnClanDestroy(string tag)
         {
-            Puts($"Sending clan delete for {tag} to Poundbot");
-            webrequest.Enqueue(
-                $"{Config["api_url"]}clans/{tag}",
-                null,
-                (code, response) =>
-                {
-                    if (code != 200)
+            if (ApiRequestOk())
+            {
+                Puts($"Sending clan delete for {tag} to Poundbot");
+                webrequest.Enqueue(
+                    $"{Config["api_url"]}clans/{tag}",
+                    null,
+                    (code, response) =>
                     {
-                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
-                        Puts(error.Error);
-                    }
+                        if (!ApiSuccess(code == 200))
+                        {
+                            var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
+                            Puts(error.Error);
+                        }
 
-                }, this, RequestMethod.DELETE, new Dictionary<string, string>
-                { { "Content-type", "application/json" }
-                }, 100f);
+                    }, this, RequestMethod.DELETE, new Dictionary<string, string>
+                    { { "Content-type", "application/json" }
+                    }, 100f);
+            }
         }
 
         private Timer startChatRunner()
         {
             return timer.Repeat(1f, 0, () =>
             {
-                webrequest.Enqueue(
-                    $"{Config["api_url"]}chat",
-                    null,
-                    (code, response) =>
-                    {
-                        switch (code)
+                if (ApiRequestOk())
+                {
+                    webrequest.Enqueue(
+                        $"{Config["api_url"]}chat",
+                        null,
+                        (code, response) =>
                         {
-                            case 200:
-                                ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
-                                if (message != null)
-                                {
-                                    PrintToChat($"<color=red>{{DSCD}}</color> <color=orange>{message?.DisplayName}</color>: {message?.Message}");
-                                }
-                                break;
-                            case 204:
-                                break;
-                            default:
-                                Puts($"Error connecting to API {response}");
-                                break;
-                        }
+                            switch (code)
+                            {
+                                case 200:
+                                    ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
+                                    if (message != null)
+                                    {
+                                        PrintToChat($"<color=red>{{DSCD}}</color> <color=orange>{message?.DisplayName}</color>: {message?.Message}");
+                                    }
+                                    ApiSuccess(true);
+                                    break;
+                                case 204:
+                                    ApiSuccess(true);
+                                    break;
+                                default:
+                                    ApiError(code, response);
+                                    break;
+                            }
 
-                    }, this,
-                    RequestMethod.GET,
-                    new Dictionary<string, string> { { "Content-type", "application/json" } },
-                    1000f
-                );
+                        }, this,
+                        RequestMethod.GET,
+                        new Dictionary<string, string> { { "Content-type", "application/json" } },
+                        1000f
+                    );
+                }
             });
         }
 
         void OnBetterChat(Dictionary<string, object> data)
         {
-            IPlayer player = (IPlayer) data["Player"];
-            var cm = new ChatMessage { };
-            cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
-            cm.DisplayName = player.Name;
-            cm.Message = (string) data["Text"];
-            if (Clans != null)
+            if (ApiRequestOk())
             {
-                cm.ClanTag = (string) Clans?.Call("GetClanOf", player.Id);
-            }
-            var body = JsonConvert.SerializeObject(cm);
+                IPlayer player = (IPlayer) data["Player"];
+                var cm = new ChatMessage { };
+                cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
+                cm.DisplayName = player.Name;
+                cm.Message = (string) data["Text"];
+                if (Clans != null)
+                {
+                    cm.ClanTag = (string) Clans?.Call("GetClanOf", player.Id);
+                }
+                var body = JsonConvert.SerializeObject(cm);
 
-            webrequest.Enqueue(
-                $"{Config["api_url"]}chat",
-                body,
-                (code, response) => { if (code != 200) { Puts($"Error connecting to API {response}"); } },
-                this,
-                RequestMethod.POST,
-                new Dictionary<string, string> { { "Content-type", "application/json" } },
-                100f
-            );
+                webrequest.Enqueue(
+                    $"{Config["api_url"]}chat",
+                    body,
+                    (code, response) => { if (!ApiSuccess(code == 200)) { ApiError(code, response); } },
+                    this,
+                    RequestMethod.POST,
+                    new Dictionary<string, string> { { "Content-type", "application/json" } },
+                    100f
+                );
+            }
         }
 
         #region Commands
         [ChatCommand("discord")]
         private void cmdDiscord(BasePlayer player, string command, string[] args)
         {
-            if (args.Count() != 1)
+            if (ApiRequestOk())
             {
-                PrintToChat(player, "Usage: /discord <discord name>\n Example: /discord FancyGuy#8080");
-                return;
-            }
-
-            var da = new DiscordAuth(player.displayName, args[0], player.userID, (string) Clans?.Call("GetClanOf", player.userID));
-
-            var body = JsonConvert.SerializeObject(da);
-
-            webrequest.Enqueue(
-                $"{Config["api_url"]}discord_auth",
-                body,
-                (code, response) =>
+                if (args.Count() != 1)
                 {
-                    if (code == 200)
-                    {
-                        PrintToChat(player, $"Enter the following PIN to the bot in discord: {da.Pin.ToString("D4")}");
-                    }
-                    else
-                    {
-                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
-                        PrintToChat(player, error.Error);
-                    }
+                    PrintToChat(player, "Usage: /discord <discord name>\n Example: /discord FancyGuy#8080");
+                    return;
+                }
 
-                }, this, RequestMethod.PUT, new Dictionary<string, string>
-                { { "Content-type", "application/json" }
-                }, 100f);
+                var da = new DiscordAuth(player.displayName, args[0], player.userID, (string) Clans?.Call("GetClanOf", player.userID));
+
+                var body = JsonConvert.SerializeObject(da);
+
+                webrequest.Enqueue(
+                    $"{Config["api_url"]}discord_auth",
+                    body,
+                    (code, response) =>
+                    {
+                        if (ApiSuccess(code == 200))
+                        {
+                            PrintToChat(player, $"Enter the following PIN to the bot in discord: {da.Pin.ToString("D4")}");
+                        }
+                        else
+                        {
+                            ApiError(code, response);
+                        }
+
+                    }, this, RequestMethod.PUT, new Dictionary<string, string>
+                    { { "Content-type", "application/json" }
+                    }, 100f);
+            }
+            else
+            {
+                PrintToChat(player, "Cannot connect to PoundBot right now. Please alert the admins.");
+            }
         }
 
         #endregion
