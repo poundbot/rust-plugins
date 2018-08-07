@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -19,14 +20,14 @@ namespace Oxide.Plugins
         [PluginReference]
         Plugin Clans, BetterChat;
 
-        private int ApiRetrySeconds = 1;
-        private int ApiRetryNotify = 20;
+        static int ApiRetrySeconds = 2;
+        static int ApiRetryNotify = 20;
 
-        private bool ApiInError = false;
-        private bool ApiRetry = false;
-        private uint ApiRetryAttempts = 0;
-        private DateTime ApiErrorTime;
-        private DateTime LastApiAttempt;
+        static bool ApiInError = false;
+        static bool ApiRetry = false;
+        static uint ApiRetryAttempts = 0;
+        static DateTime ApiErrorTime;
+        static DateTime LastApiAttempt;
 
         class ApiErrorResponse
         {
@@ -81,7 +82,7 @@ namespace Oxide.Plugins
 
         #region Configuration
 
-        private bool ApiRequestOk()
+        public bool ApiRequestOk()
         {
             if (ApiInError && !ApiRetry && (LastApiAttempt.AddSeconds(ApiRetrySeconds) < DateTime.Now))
             {
@@ -100,22 +101,28 @@ namespace Oxide.Plugins
             string error;
             if (code == 0)
             {
-                if (!ApiInError)
+                if (ApiInError)
+                {
+                    if (ApiRetry)
+                    {
+                        LastApiAttempt = DateTime.Now;
+                        ApiRetry = false;
+                    }
+
+                    if (ApiRetryAttempts % ApiRetryNotify != 0)
+                    {
+                        return;
+                    }
+
+                }
+                else
                 {
                     ApiErrorTime = DateTime.Now;
                     LastApiAttempt = DateTime.Now;
                     ApiInError = true;
                     ApiRetry = false;
                 }
-                else if (ApiRetry)
-                {
-                    LastApiAttempt = DateTime.Now;
-                    ApiRetry = false;
-                    if (ApiRetryAttempts % ApiRetryNotify != 0)
-                    {
-                        return;
-                    }
-                }
+
                 error = "Connection Failure!";
             }
             else
@@ -232,22 +239,39 @@ namespace Oxide.Plugins
                 }
                 var body = JsonConvert.SerializeObject(clans);
 
-                Puts("Sending clans data to Poundbot");
-                webrequest.Enqueue(
-                    $"{Config["api_url"]}clans",
-                    body,
-                    (code, response) =>
-                    {
-                        if (!ApiSuccess(code == 200))
+                if (ApiRequestOk())
+                {
+                    Puts("Sending clans data to Poundbot");
+                    webrequest.Enqueue(
+                        $"{Config["api_url"]}clans",
+                        body,
+                        (code, response) =>
                         {
-                            ApiError(code, response);
-                        }
+                            if (!ApiSuccess(code == 200))
+                            {
+                                ApiError(code, response);
+                            }
 
-                    }, this, RequestMethod.PUT, new Dictionary<string, string>
-                    { { "Content-type", "application/json" }
-                    }, 100f);
+                        }, this, RequestMethod.PUT, new Dictionary<string, string>
+                        { { "Content-type", "application/json" }
+                        }, 100f);
+                }
             }
 
+            StartChatRunners();
+        }
+
+        void KillChatRunners()
+        {
+            foreach (var runner in chat_runners)
+            {
+                runner.Destroy();
+            }
+            chat_runners.Clear();
+        }
+
+        void StartChatRunners()
+        {
             var runners_to_start = Enumerable.Range(1, 2);
             foreach (int i in runners_to_start)
             {
@@ -293,8 +317,7 @@ namespace Oxide.Plugins
                     {
                         if (!ApiSuccess(code == 200))
                         {
-                            var error = JsonConvert.DeserializeObject<ApiErrorResponse>(response);
-                            Puts(error.Error);
+                            ApiError(code, response);
                         }
 
                     }, this, RequestMethod.DELETE, new Dictionary<string, string>
