@@ -12,10 +12,10 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("PoundbotConnector", "MrPoundsign", "0.1.1")]
-    [Description("Communicate with Poundbot")]
+    [Info("PoundBotConnector", "MrPoundsign", "0.2.2")]
+    [Description("Communicate with PoundBot")]
 
-    class PoundbotConnector : RustPlugin
+    class PoundBotConnector : RustPlugin
     {
         [PluginReference]
         Plugin Clans, BetterChat;
@@ -28,6 +28,7 @@ namespace Oxide.Plugins
         static uint ApiRetryAttempts = 0;
         static DateTime ApiErrorTime;
         static DateTime LastApiAttempt;
+        // static Dictionary<string, string> headers;
 
         class ApiErrorResponse
         {
@@ -64,15 +65,15 @@ namespace Oxide.Plugins
             public ulong SteamID;
             public string DisplayName;
             public string ClanTag;
-            public string DiscordID;
+            public string DiscordName;
             public int Pin;
             public DateTime CreatedAt;
 
-            public DiscordAuth(string displayname, string discordid, ulong steamid, string clantag)
+            public DiscordAuth(string displayname, string discordName, ulong steamid, string clantag)
             {
                 System.Random rnd = new System.Random();
                 this.DisplayName = displayname;
-                this.DiscordID = discordid;
+                this.DiscordName = discordName;
                 this.SteamID = steamid;
                 this.Pin = rnd.Next(1, 9999);
                 this.CreatedAt = DateTime.UtcNow;
@@ -80,7 +81,20 @@ namespace Oxide.Plugins
             }
         }
 
-        #region Configuration
+        public Dictionary<string, string> headers()
+        {
+            return new Dictionary<string, string>
+            {
+                {
+                    "Content-type",
+                    "application/json"
+                },
+                {
+                    "Authorization",
+                    $"Token {Config["api_key"]}"
+                }
+            };
+        }
 
         public bool ApiRequestOk()
         {
@@ -99,7 +113,7 @@ namespace Oxide.Plugins
         private void ApiError(int code, string response)
         {
             string error;
-            if (code == 0)
+            if (code == 0 || code == 400)
             {
                 if (ApiInError)
                 {
@@ -157,11 +171,13 @@ namespace Oxide.Plugins
 
         private List<Timer> chat_runners = new List<Timer>();
 
+        #region Configuration
         protected override void LoadDefaultConfig()
         {
             Config.Clear();
             Config["api_url"] = "http://localhost:9090/";
             Config["show_own_damage"] = false;
+            Config["api_key"] = "API KEY HERE";
             SaveConfig();
         }
         #endregion
@@ -220,7 +236,7 @@ namespace Oxide.Plugins
                         },
                         this,
                         RequestMethod.PUT,
-                        new Dictionary<string, string> { { "Content-type", "application/json" } },
+                        headers(),
                         100f
                     );
                 }
@@ -252,13 +268,17 @@ namespace Oxide.Plugins
                                 ApiError(code, response);
                             }
 
-                        }, this, RequestMethod.PUT, new Dictionary<string, string>
-                        { { "Content-type", "application/json" }
-                        }, 100f);
+                        },
+                        this, RequestMethod.PUT, headers(), 100f);
                 }
             }
 
             StartChatRunners();
+        }
+
+        void Unload()
+        {
+            KillChatRunners();
         }
 
         void KillChatRunners()
@@ -297,9 +317,7 @@ namespace Oxide.Plugins
                             ApiError(code, response);
                         }
 
-                    }, this, RequestMethod.PUT, new Dictionary<string, string>
-                    { { "Content-type", "application/json" }
-                    }, 100f);
+                    }, this, RequestMethod.PUT, headers(), 100f);
             }
         }
 
@@ -320,9 +338,7 @@ namespace Oxide.Plugins
                             ApiError(code, response);
                         }
 
-                    }, this, RequestMethod.DELETE, new Dictionary<string, string>
-                    { { "Content-type", "application/json" }
-                    }, 100f);
+                    }, this, RequestMethod.DELETE, headers(), 100f);
             }
         }
 
@@ -343,6 +359,7 @@ namespace Oxide.Plugins
                                     ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
                                     if (message != null)
                                     {
+                                        Puts($"{{{{Discord}}}} {message?.DisplayName}: {message?.Message}");
                                         PrintToChat($"<color=red>{{DSCD}}</color> <color=orange>{message?.DisplayName}</color>: {message?.Message}");
                                     }
                                     ApiSuccess(true);
@@ -355,10 +372,7 @@ namespace Oxide.Plugins
                                     break;
                             }
 
-                        }, this,
-                        RequestMethod.GET,
-                        new Dictionary<string, string> { { "Content-type", "application/json" } },
-                        1000f
+                        }, this, RequestMethod.GET, headers(), 1000f
                     );
                 }
             });
@@ -383,10 +397,7 @@ namespace Oxide.Plugins
                     $"{Config["api_url"]}chat",
                     body,
                     (code, response) => { if (!ApiSuccess(code == 200)) { ApiError(code, response); } },
-                    this,
-                    RequestMethod.POST,
-                    new Dictionary<string, string> { { "Content-type", "application/json" } },
-                    100f
+                    this, RequestMethod.POST, headers(), 100f
                 );
             }
         }
@@ -421,9 +432,7 @@ namespace Oxide.Plugins
                             ApiError(code, response);
                         }
 
-                    }, this, RequestMethod.PUT, new Dictionary<string, string>
-                    { { "Content-type", "application/json" }
-                    }, 100f);
+                    }, this, RequestMethod.PUT, headers(), 100f);
             }
             else
             {
