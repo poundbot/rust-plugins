@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("PoundBotConnector", "MrPoundsign", "0.2.4")]
+    [Info("PoundBotConnector", "MrPoundsign", "0.2.3")]
     [Description("Connector for the PoundBot, with raid alerts and chat relaying to Discord.")]
 
     class PoundBotConnector : RustPlugin
@@ -204,7 +204,7 @@ namespace Oxide.Plugins
                 {
                     Puts(lang.GetMessage("connector.sending_clans", this));
                     webrequest.Enqueue(
-                        $"{Config["api_url"]}clans",
+                        $"{Config["api_url"]}api/clans",
                         body,
                         (code, response) =>
                         {
@@ -273,7 +273,7 @@ namespace Oxide.Plugins
                 if (ApiRequestOk())
                 {
                     webrequest.Enqueue(
-                        $"{Config["api_url"]}entity_death",
+                        $"{Config["api_url"]}api/entity_death",
                         body,
                         (code, response) =>
                         {
@@ -315,7 +315,7 @@ namespace Oxide.Plugins
             {
                 Puts(string.Format(lang.GetMessage("connector.sending_clan", this), tag));
                 webrequest.Enqueue(
-                    $"{Config["api_url"]}clans/{tag}",
+                    $"{Config["api_url"]}api/clans/{tag}",
                     body,
                     (code, response) =>
                     {
@@ -336,7 +336,7 @@ namespace Oxide.Plugins
             {
                 Puts(string.Format(lang.GetMessage("connector.sending_clan_delete", this), tag));
                 webrequest.Enqueue(
-                    $"{Config["api_url"]}clans/{tag}",
+                    $"{Config["api_url"]}api/clans/{tag}",
                     null,
                     (code, response) =>
                     {
@@ -356,7 +356,7 @@ namespace Oxide.Plugins
                 if (ApiRequestOk())
                 {
                     webrequest.Enqueue(
-                        $"{Config["api_url"]}chat",
+                        $"{Config["api_url"]}api/chat",
                         null,
                         (code, response) =>
                         {
@@ -401,7 +401,7 @@ namespace Oxide.Plugins
                 var body = JsonConvert.SerializeObject(cm);
 
                 webrequest.Enqueue(
-                    $"{Config["api_url"]}chat",
+                    $"{Config["api_url"]}api/chat",
                     body,
                     (code, response) => { if (!ApiSuccess(code == 200)) { ApiError(code, response); } },
                     this, RequestMethod.POST, headers(), 100f
@@ -426,7 +426,7 @@ namespace Oxide.Plugins
                 var body = JsonConvert.SerializeObject(da);
 
                 webrequest.Enqueue(
-                    $"{Config["api_url"]}discord_auth",
+                    $"{Config["api_url"]}api/discord_auth",
                     body,
                     (code, response) =>
                     {
