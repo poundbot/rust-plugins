@@ -12,13 +12,13 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("PoundBotConnector", "MrPoundsign", "0.2.3")]
+    [Info("Pound Bot Connector", "MrPoundsign", "0.2.4")]
     [Description("Connector for the PoundBot, with raid alerts and chat relaying to Discord.")]
 
     class PoundBotConnector : RustPlugin
     {
         [PluginReference]
-        Plugin Clans, BetterChat;
+        Plugin Clans;
 
         protected int ApiRetrySeconds = 2;
         protected int ApiRetryNotify = 50;
@@ -103,7 +103,7 @@ namespace Oxide.Plugins
                 ApiRetryAttempts++;
                 if (ApiRetryAttempts == 1 || ApiRetryAttempts % ApiRetryNotify == 0)
                 {
-                    Puts(string.Format(lang.GetMessage("connector.time_in_error", this),DateTime.Now.Subtract(ApiErrorTime).ToShortString()));
+                    Puts(string.Format(lang.GetMessage("connector.time_in_error", this), DateTime.Now.Subtract(ApiErrorTime).ToShortString()));
                 }
                 ApiRetry = true;
             }
@@ -173,18 +173,30 @@ namespace Oxide.Plugins
         #region Configuration
         protected override void LoadDefaultConfig()
         {
-            Config.Clear();
             Config["api_url"] = "http://localhost:9090/";
             Config["show_own_damage"] = false;
             Config["api_key"] = "API KEY HERE";
-            SaveConfig();
         }
         #endregion
 
-
-        #region Hooks
-        private void Loaded()
+        #region Oxide Hooks
+        private void Init()
         {
+            var Messages = new Dictionary<string, string>
+                {
+                    { "connector.reconnected", "Reconnected with PoundBot" },
+                    { "connector.time_in_error", "Total time in error: {0}" },
+                    { "connector.sending_clans", "Sending clans data to PoundBot" },
+                    { "connector.sending_clan", "Sending clan {0} to PoundBot" },
+                    { "connector.sending_clan_delete", "Sending clan delete for {0} to PoundBot" },
+                    { "connector.error", "Error communicating with PoundBot: {0}/{1}" },
+                    { "connector.user_error", "Cannot connect to PoundBot right now. Please alert the admins." },
+                    { "chat.discord", "<color=red>{{DSCD}}</color> <color=orange>{0}</color>: {1}" },
+                    { "chat.console", "{{DSCD}} {0}: {1}" },
+                    { "discord.pin", "Enter the following PIN to the bot in discord: {0}." },
+                    { "discord.connected", "You are connected to discord." },
+                    { "usage", "Usage: /discord \"<discord name>\"\n Example: /discord \"Fancy Guy#8080\"" },
+                };
             lang.RegisterMessages(Messages, this);
         }
 
@@ -192,11 +204,11 @@ namespace Oxide.Plugins
         {
             if (Clans != null)
             {
-                var clan_tags = (JArray) Clans?.Call("GetAllClans");
+                var clan_tags = (JArray) Clans.Call("GetAllClans");
                 List<JObject> clans = new List<JObject>();
                 foreach (string ctag in clan_tags)
                 {
-                    clans.Add((JObject) Clans?.Call("GetClan", ctag));
+                    clans.Add((JObject) Clans.Call("GetClan", ctag));
                 }
                 var body = JsonConvert.SerializeObject(clans);
 
@@ -240,6 +252,7 @@ namespace Oxide.Plugins
         {
             PrintDeath(victim, info?.Initiator);
         }
+
         #endregion
 
         void PrintDeath(BaseEntity entity, BaseEntity initiator)
@@ -251,10 +264,13 @@ namespace Oxide.Plugins
             if (initiator is BasePlayer)
             {
                 var player = (BasePlayer) initiator;
+
                 if (entity.OwnerID == 0) return;
                 if (!(bool) Config["show_own_damage"] && entity.OwnerID == player.userID) return;
+
                 var priv = entity.GetBuildingPrivilege();
                 ulong[] owners;
+                
                 if (priv != null)
                 {
                     owners = priv.authorizedPlayers.Select(id => { return id.userid; }).ToArray();
@@ -308,23 +324,26 @@ namespace Oxide.Plugins
 
         void OnClanCreate(string tag)
         {
-            var clan = (JObject) Clans?.Call("GetClan", tag);
-            var body = JsonConvert.SerializeObject(clan);
-
-            if (ApiRequestOk())
+            if (Clans != null)
             {
-                Puts(string.Format(lang.GetMessage("connector.sending_clan", this), tag));
-                webrequest.Enqueue(
-                    $"{Config["api_url"]}api/clans/{tag}",
-                    body,
-                    (code, response) =>
-                    {
-                        if (!ApiSuccess(code == 200))
-                        {
-                            ApiError(code, response);
-                        }
+                var clan = (JObject) Clans.Call("GetClan", tag);
+                var body = JsonConvert.SerializeObject(clan);
 
-                    }, this, RequestMethod.PUT, headers(), 100f);
+                if (ApiRequestOk())
+                {
+                    Puts(string.Format(lang.GetMessage("connector.sending_clan", this), tag));
+                    webrequest.Enqueue(
+                        $"{Config["api_url"]}api/clans/{tag}",
+                        body,
+                        (code, response) =>
+                        {
+                            if (!ApiSuccess(code == 200))
+                            {
+                                ApiError(code, response);
+                            }
+
+                        }, this, RequestMethod.PUT, headers(), 100f);
+                }
             }
         }
 
@@ -366,8 +385,8 @@ namespace Oxide.Plugins
                                     ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
                                     if (message != null)
                                     {
-                                        Puts(string.Format(lang.GetMessage("chat.console", this),message?.DisplayName, message?.Message));
-                                        PrintToChat(string.Format(lang.GetMessage("chat.discord", this),message?.DisplayName, message?.Message));
+                                        Puts(string.Format(lang.GetMessage("chat.console", this), message?.DisplayName, message?.Message));
+                                        PrintToChat(string.Format(lang.GetMessage("chat.discord", this), message?.DisplayName, message?.Message));
                                     }
                                     ApiSuccess(true);
                                     break;
@@ -394,10 +413,8 @@ namespace Oxide.Plugins
                 cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
                 cm.DisplayName = player.Name;
                 cm.Message = (string) data["Text"];
-                if (Clans != null)
-                {
-                    cm.ClanTag = (string) Clans?.Call("GetClanOf", player.Id);
-                }
+                cm.ClanTag = (string) Clans?.Call("GetClanOf", player.Id);
+
                 var body = JsonConvert.SerializeObject(cm);
 
                 webrequest.Enqueue(
@@ -438,7 +455,8 @@ namespace Oxide.Plugins
                         {
                             PrintToChat(player, lang.GetMessage("discord.connected", this, player.IPlayer.Id), da.Pin.ToString("D4"));
                         }
-                        else {
+                        else
+                        {
                             ApiError(code, response);
                         }
 
@@ -473,26 +491,5 @@ namespace Oxide.Plugins
             }
             return empty + Convert.ToChar(65 + num2).ToString();
         }
-
-        # region l10n
-        private string msg(string key, ulong playerId = 0U) => lang.GetMessage(key, this, playerId == 0U ? null : playerId.ToString());
-
-        private readonly Dictionary<string, string> Messages = new Dictionary<string, string>
-        {
-            ["connector.reconnected"] = "Reconnected with PoundBot",
-            ["connector.time_in_error"] = "Total time in error: {0}",
-            ["connector.sending_clans"] = "Sending clans data to PoundBot",
-            ["connector.sending_clan"] = "Sending clan {0} to PoundBot",
-            ["connector.sending_clan_delete"] = "Sending clan delete for {0} to PoundBot",
-            ["connector.error"] = "Error communicating with PoundBot: {0}/{1}",
-            ["connector.user_error"] = "Cannot connect to PoundBot right now. Please alert the admins.",
-            ["chat.discord"] = "<color=red>{{DSCD}}</color> <color=orange>{0}</color>: {1}",
-            ["chat.console"] = "{{DSCD}} {0}: {1}",
-            ["discord.pin"] = "Enter the following PIN to the bot in discord: {0}.",
-            ["discord.connected"] = "You are connected to discord.",
-            ["usage"] = "Usage: /discord <discord name>\n Example: /discord FancyGuy#8080",
-        };
-
-        #endregion
     }
 }
