@@ -86,21 +86,10 @@ namespace Oxide.Plugins
         {
             return new Dictionary<string, string>
             {
-                {
-                    "Content-type",
-                    "application/json"
-                },
-                {
-                    "Authorization",
-                    $"Token {Config["api_key"]}"
-                },
-                {
-                    "X-PoundBotConnector-Version",
-                    "0.3.1"
-                },
-                {
-                    "User-Agent: PoundBotConnector/0.3.1"
-                }
+                {"Content-type", "application/json"},
+                {"Authorization", $"Token {Config["api_key"]}"},
+                {"X-PoundBotConnector-Version", "0.3.1"},
+                {"User-Agent", "PoundBotConnector/0.3.1"}
             };
         }
 
