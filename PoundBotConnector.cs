@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Pound Bot Connector", "MrPoundsign", "0.2.6")]
+    [Info("Pound Bot Connector", "MrPoundsign", "1.0.0")]
     [Description("Connector for the PoundBot, with raid alerts and chat relaying to Discord.")]
 
     class PoundBotConnector : RustPlugin
@@ -94,6 +94,10 @@ namespace Oxide.Plugins
                 {
                     "Authorization",
                     $"Token {Config["api_key"]}"
+                },
+                {
+                    "X-PoundBotConnector-Version",
+                    "0.3.0"
                 }
             };
         }
