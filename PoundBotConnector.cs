@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Pound Bot Connector", "MrPoundsign", "0.3.0")]
+    [Info("Pound Bot Connector", "MrPoundsign", "0.3.1")]
     [Description("Connector for the PoundBot, with raid alerts and chat relaying to Discord.")]
 
     class PoundBotConnector : RustPlugin
@@ -30,7 +30,6 @@ namespace Oxide.Plugins
         protected uint ApiRetryAttempts = 0;
         protected DateTime ApiErrorTime;
         protected DateTime LastApiAttempt;
-        // static Dictionary<string, string> headers;
 
         class ApiErrorResponse
         {
@@ -97,7 +96,10 @@ namespace Oxide.Plugins
                 },
                 {
                     "X-PoundBotConnector-Version",
-                    "0.3.0"
+                    "0.3.1"
+                },
+                {
+                    "User-Agent: PoundBotConnector/0.3.1"
                 }
             };
         }
