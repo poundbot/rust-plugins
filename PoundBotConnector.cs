@@ -12,13 +12,15 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Pound Bot Connector", "MrPoundsign", "0.2.5")]
+    [Info("Pound Bot Connector", "MrPoundsign", "0.2.6")]
     [Description("Connector for the PoundBot, with raid alerts and chat relaying to Discord.")]
 
     class PoundBotConnector : RustPlugin
     {
         [PluginReference]
         Plugin Clans;
+
+        protected int ApiChatRunnersCount = 0;
 
         protected int ApiRetrySeconds = 2;
         protected int ApiRetryNotify = 50;
@@ -113,30 +115,30 @@ namespace Oxide.Plugins
         private void ApiError(int code, string response)
         {
             string error;
-            if (code == 0 || code == 400)
+            if (ApiInError)
             {
-                if (ApiInError)
+                if (ApiRetry)
                 {
-                    if (ApiRetry)
-                    {
-                        LastApiAttempt = DateTime.Now;
-                        ApiRetry = false;
-                    }
-
-                    if (ApiRetryAttempts % ApiRetryNotify != 0)
-                    {
-                        return;
-                    }
-
-                }
-                else
-                {
-                    ApiErrorTime = DateTime.Now;
                     LastApiAttempt = DateTime.Now;
-                    ApiInError = true;
                     ApiRetry = false;
                 }
 
+                if (ApiRetryAttempts % ApiRetryNotify != 0)
+                {
+                    return;
+                }
+
+            }
+            else
+            {
+                ApiErrorTime = DateTime.Now;
+                LastApiAttempt = DateTime.Now;
+                ApiInError = true;
+                ApiRetry = false;
+            }
+
+            if (code == 0)
+            {
                 error = "Connection Failure!";
             }
             else
@@ -173,7 +175,7 @@ namespace Oxide.Plugins
         #region Configuration
         protected override void LoadDefaultConfig()
         {
-            Config["api_url"] = "http://poundbot.mrpoundsign.com:7070/";
+            Config["api_url"] = "http://poundbot.mrpoundsign.com/";
             Config["show_own_damage"] = false;
             Config["api_key"] = "API KEY HERE";
         }
@@ -370,36 +372,41 @@ namespace Oxide.Plugins
 
         private Timer startChatRunner()
         {
-            return timer.Repeat(1f, 0, () =>
+            return timer.Every(1f, () =>
             {
-                if (ApiRequestOk())
+                if (ApiChatRunnersCount < 2)
                 {
-                    webrequest.Enqueue(
-                        $"{Config["api_url"]}api/chat",
-                        null,
-                        (code, response) =>
-                        {
-                            switch (code)
+                    ApiChatRunnersCount ++;
+                    if (ApiRequestOk())
+                    {
+                        webrequest.Enqueue(
+                            $"{Config["api_url"]}api/chat",
+                            null,
+                            (code, response) =>
                             {
-                                case 200:
-                                    ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
-                                    if (message != null)
-                                    {
-                                        Puts(string.Format(lang.GetMessage("chat.console", this), message?.DisplayName, message?.Message));
-                                        PrintToChat(string.Format(lang.GetMessage("chat.discord", this), message?.DisplayName, message?.Message));
-                                    }
-                                    ApiSuccess(true);
-                                    break;
-                                case 204:
-                                    ApiSuccess(true);
-                                    break;
-                                default:
-                                    ApiError(code, response);
-                                    break;
-                            }
+                                ApiChatRunnersCount --;
+                                switch (code)
+                                {
+                                    case 200:
+                                        ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
+                                        if (message != null)
+                                        {
+                                            Puts(string.Format(lang.GetMessage("chat.console", this), message?.DisplayName, message?.Message));
+                                            PrintToChat(string.Format(lang.GetMessage("chat.discord", this), message?.DisplayName, message?.Message));
+                                        }
+                                        ApiSuccess(true);
+                                        break;
+                                    case 204:
+                                        ApiSuccess(true);
+                                        break;
+                                    default:
+                                        ApiError(code, response);
+                                        break;
+                                }
 
-                        }, this, RequestMethod.GET, headers(), 1000f
-                    );
+                            }, this, RequestMethod.GET, headers(), 120000f
+                        );
+                    }
                 }
             });
         }
