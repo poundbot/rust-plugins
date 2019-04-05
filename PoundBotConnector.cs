@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Pound Bot Connector", "MrPoundsign", "0.3.2")]
+    [Info("Pound Bot Connector", "MrPoundsign", "0.3.3")]
     [Description("Connector for the PoundBot, with raid alerts and chat relaying to Discord.")]
 
     class PoundBotConnector : RustPlugin
@@ -22,8 +22,8 @@ namespace Oxide.Plugins
 
         protected int ApiChatRunnersCount = 0;
 
-        protected int ApiRetrySeconds = 2;
-        protected int ApiRetryNotify = 50;
+        protected int ApiRetrySeconds = 1;
+        protected int ApiRetryNotify = 10;
 
         protected bool ApiInError = false;
         protected bool ApiRetry = false;
@@ -153,7 +153,7 @@ namespace Oxide.Plugins
 
         private bool ApiSuccess(bool success)
         {
-            // Reset retry varibles if we're successful
+            // Reset retry variables if we're successful
             if (ApiInError && success)
             {
                 Puts(lang.GetMessage("connector.reconnected", this));
@@ -371,9 +371,9 @@ namespace Oxide.Plugins
             {
                 if (ApiChatRunnersCount < 2)
                 {
-                    ApiChatRunnersCount ++;
                     if (ApiRequestOk())
                     {
+                        ApiChatRunnersCount ++;
                         webrequest.Enqueue(
                             $"{Config["api_url"]}api/chat",
                             null,
