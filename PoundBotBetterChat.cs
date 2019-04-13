@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info ("Pound Bot Better Chat", "MrPoundsign", "1.0.0")]
+  [Info ("Pound Bot Better Chat", "MrPoundsign", "1.0.1")]
   [Description ("Better Chat relay for use with PoundBot")]
 
   class PoundBotBetterChat : RustPlugin
@@ -23,8 +23,6 @@ namespace Oxide.Plugins
       public ulong SteamID { get; set; }
       public string DisplayName { get; set; }
       public string Message { get; set; }
-      public string Source { get; set; }
-      public string ClanTag { get; set; }
     }
 
 
@@ -108,7 +106,7 @@ namespace Oxide.Plugins
               },
               this,
               RequestMethod.GET,
-              headers(),
+              Headers(),
               120000f
             );
           }
@@ -125,7 +123,6 @@ namespace Oxide.Plugins
         cm.SteamID = (ulong) Convert.ToUInt64 (player.Id);
         cm.DisplayName = player.Name;
         cm.Message = (string) data["Text"];
-        // cm.ClanTag = (string) Clans?.Call ("GetClanOf", player.Id);
 
         var body = JsonConvert.SerializeObject (cm);
 
@@ -140,7 +137,7 @@ namespace Oxide.Plugins
           },
           this,
           RequestMethod.POST,
-          headers(),
+          Headers(),
           100f
         );
       }
@@ -162,8 +159,11 @@ namespace Oxide.Plugins
       PoundBot?.Call("ApiError", code, response);
     }
 
-    private Dictionary<string,string> headers() {
-        return (Dictionary<string,string>) PoundBot?.Call("headers");
+    private Dictionary<string, string> Headers()
+    {
+      var headers = (Dictionary<string, string>) PoundBot?.Call("Headers");
+      headers["X-PoundBotBetterChat-Version"] = Version.ToString();
+      return headers;
     }
   }
 }

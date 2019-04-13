@@ -8,8 +8,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info ("Pound Bot RaidAlerts", "MrPoundsign", "1.0.0")]
-  [Description ("Raid Alerts for use with PoundBot")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.0.0")]
+  [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
   {
@@ -23,7 +23,7 @@ namespace Oxide.Plugins
       public ulong[] Owners;
       public DateTime CreatedAt;
 
-      public EntityDeath (string name, string gridpos, ulong[] owners)
+      public EntityDeath(string name, string gridpos, ulong[] owners)
       {
         this.Name = name;
         this.GridPos = gridpos;
@@ -33,13 +33,13 @@ namespace Oxide.Plugins
     }
 
     #region Configuration
-    protected override void LoadDefaultConfig ()
+    protected override void LoadDefaultConfig()
     {
       Config["show_own_damage"] = false;
     }
     #endregion
 
-    void OnEntityDeath (BaseEntity victim, HitInfo info)
+    void OnEntityDeath(BaseEntity victim, HitInfo info)
     {
       if (!(victim is DecayEntity) &&
         !(victim is StorageContainer) &&
@@ -47,10 +47,10 @@ namespace Oxide.Plugins
       ) return;
 
       if (info?.Initiator == null) return;
-      SendEntityDeath (victim, info?.Initiator);
+      SendEntityDeath(victim, info?.Initiator);
     }
 
-    void SendEntityDeath (BaseEntity entity, BaseEntity initiator)
+    void SendEntityDeath(BaseEntity entity, BaseEntity initiator)
     {
       if (entity == null) return;
       if (initiator == null) return;
@@ -63,83 +63,89 @@ namespace Oxide.Plugins
         if (entity.OwnerID == 0) return;
         if (!(bool) Config["show_own_damage"] && entity.OwnerID == player.userID) return;
 
-        var priv = entity.GetBuildingPrivilege ();
+        var priv = entity.GetBuildingPrivilege();
         ulong[] owners;
 
         if (priv != null)
         {
-          owners = priv.authorizedPlayers.Select (id => { return id.userid; }).ToArray ();
+          owners = priv.authorizedPlayers.Select(id => { return id.userid; }).ToArray();
         }
         else
         {
           owners = new ulong[] { entity.OwnerID };
         }
 
-        string[] words = entity.ShortPrefabName.Split ('/');
-        var name = words[words.Length - 1].Split ('.') [0];
+        string[] words = entity.ShortPrefabName.Split('/');
+        var name = words[words.Length - 1].Split('.') [0];
 
-        var di = new EntityDeath (name, GridPos (entity), owners);
-        var body = JsonConvert.SerializeObject (di);
+        var di = new EntityDeath(name, GridPos(entity), owners);
+        var body = JsonConvert.SerializeObject(di);
 
-        if (ApiRequestOk ())
+        if (ApiRequestOk())
         {
-          webrequest.Enqueue (
+          webrequest.Enqueue(
             $"{ApiBase()}/entity_death",
             body,
             (code, response) =>
             {
-              if (!ApiSuccess (code == 200)) { ApiError (code, response); }
+              if (!ApiSuccess(code == 200)) { ApiError(code, response); }
             },
             this,
             RequestMethod.PUT,
-            headers (),
+            Headers(),
             100f
           );
         }
       }
     }
 
-    private string GridPos (BaseEntity entity)
+    private string GridPos(BaseEntity entity)
     {
       var size = World.Size;
       var gridCellSize = 150;
       var num2 = (int) (entity.transform.position.x + (size / 2)) / gridCellSize;
-      var index = Math.Abs ((int) (entity.transform.position.z - (size / 2)) / gridCellSize);
+      var index = Math.Abs((int) (entity.transform.position.z - (size / 2)) / gridCellSize);
       return $"{this.NumberToLetter(num2) + index.ToString()}";
     }
 
-    public string NumberToLetter (int num)
+    public string NumberToLetter(int num)
     {
-      int num1 = Mathf.FloorToInt ((float) (num / 26));
+      int num1 = Mathf.FloorToInt((float) (num / 26));
       int num2 = num % 26;
       string empty = string.Empty;
       if (num1 > 0)
       {
         for (int index = 0; index < num1; ++index)
-          empty += Convert.ToChar (65 + index).ToString ();
+          empty += Convert.ToChar(65 + index).ToString();
       }
-      return empty + Convert.ToChar (65 + num2).ToString ();
+      return empty + Convert.ToChar(65 + num2).ToString();
     }
 
-    private bool ApiRequestOk() {
+    private bool ApiRequestOk()
+    {
       return (bool) PoundBot?.Call("ApiRequestOk");
     }
 
-    private string ApiBase() {
-      Puts((string)PoundBot?.Call("ApiBase"));
-      return (string)PoundBot?.Call("ApiBase");
+    private string ApiBase()
+    {
+      return (string) PoundBot?.Call("ApiBase");
     }
 
-    private bool ApiSuccess(bool success) {
+    private bool ApiSuccess(bool success)
+    {
       return (bool) PoundBot?.Call("ApiSuccess", success);
     }
 
-    private void ApiError(int code, string response) {
+    private void ApiError(int code, string response)
+    {
       PoundBot?.Call("ApiError", code, response);
     }
 
-    private Dictionary<string,string> headers() {
-      return (Dictionary<string,string>) PoundBot?.Call("headers");
+    private Dictionary<string, string> Headers()
+    {
+      var headers = (Dictionary<string, string>) PoundBot?.Call("Headers");
+      headers["X-PoundBotRaidAlerts-Version"] = Version.ToString();
+      return headers;
     }
   }
 }
