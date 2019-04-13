@@ -8,8 +8,8 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info ("Pound Bot Better Chat", "MrPoundsign", "1.0.1")]
-  [Description ("Better Chat relay for use with PoundBot")]
+  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.2")]
+  [Description("Better Chat relay for use with PoundBot")]
 
   class PoundBotBetterChat : RustPlugin
   {
@@ -21,64 +21,66 @@ namespace Oxide.Plugins
     class ChatMessage
     {
       public ulong SteamID { get; set; }
+      public string ClanTag { get; set; }
       public string DisplayName { get; set; }
       public string Message { get; set; }
     }
 
-
-    private List<Timer> chat_runners = new List<Timer> ();
+    private List<Timer> chat_runners = new List<Timer>();
 
     #region Oxide Hooks
-    private void Init ()
+    private void LoadDefaultMessages()
     {
-      lang.RegisterMessages (
-        new Dictionary<string, string> {
-          { "chat.console", "{{DSCD}} {0}: {1}" },
-          { "chat.discord", "<color=red>{{DSCD}}</color> <color=orange>{0}</color>: {1}" }
+      lang.RegisterMessages(
+        new Dictionary<string, string>
+        { { "chat.ClanTag", "<color=blue>[{0}]</color> " },
+          { "chat.Msg", "<color=red>{{DSCD}}</color> <color=orange>{0}</color>: {1}" },
+          { "console.ClanTag", "[{0}] " },
+          { "console.Msg", "{{DSCD}} {0}: {1}" },
         },
         this
       );
     }
 
-    void OnServerInitialized ()
+    void OnServerInitialized()
     {
-      StartChatRunners ();
+      StartChatRunners();
     }
 
-    void Unload ()
+    void Unload()
     {
-      KillChatRunners ();
+      KillChatRunners();
     }
     #endregion
 
-    void KillChatRunners ()
+    void KillChatRunners()
     {
       foreach (var runner in chat_runners)
       {
-        runner.Destroy ();
+        runner.Destroy();
       }
-      chat_runners.Clear ();
+      chat_runners.Clear();
     }
 
-    void StartChatRunners ()
+    void StartChatRunners()
     {
-      var runners_to_start = Enumerable.Range (1, 2);
+      var runners_to_start = Enumerable.Range(1, 2);
       foreach (int i in runners_to_start)
       {
-        chat_runners.Add (startChatRunner ());
+        chat_runners.Add(startChatRunner());
       }
     }
 
-    private Timer startChatRunner ()
+    private Timer startChatRunner()
     {
-      return timer.Every (1f, () =>
+      return timer.Every(1f, () =>
       {
         if (ApiChatRunnersCount < 2)
         {
           if (ApiRequestOk())
           {
             ApiChatRunnersCount++;
-            webrequest.Enqueue (
+            webrequest.Enqueue(
               $"{ApiBase()}/chat",
               null,
               (code, response) =>
@@ -87,11 +89,18 @@ namespace Oxide.Plugins
                 switch (code)
                 {
                   case 200:
-                    ChatMessage message = JsonConvert.DeserializeObject<ChatMessage> (response);
+                    ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
                     if (message != null)
                     {
-                      Puts (string.Format (lang.GetMessage ("chat.console", this), message?.DisplayName, message?.Message));
-                      PrintToChat (string.Format (lang.GetMessage ("chat.discord", this), message?.DisplayName, message?.Message));
+                      var chatName = message?.DisplayName;
+                      var consoleName = message?.DisplayName;
+                      if ((chatName != null) && (message.ClanTag != ""))
+                      {
+                        chatName = $"{string.Format(lang.GetMessage("chat.ClanTag", this), message.ClanTag)}{chatName}";
+                        consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
+                      }
+                      Puts(string.Format(lang.GetMessage("console.Msg", this), consoleName, message?.Message));
+                      PrintToChat(string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message));
                     }
                     ApiSuccess(true);
                     break;
@@ -114,25 +123,26 @@ namespace Oxide.Plugins
       });
     }
 
-    void OnBetterChat (Dictionary<string, object> data)
+    void OnBetterChat(Dictionary<string, object> data)
     {
       if (ApiRequestOk())
       {
         IPlayer player = (IPlayer) data["Player"];
         var cm = new ChatMessage { };
-        cm.SteamID = (ulong) Convert.ToUInt64 (player.Id);
+        cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
         cm.DisplayName = player.Name;
         cm.Message = (string) data["Text"];
 
-        var body = JsonConvert.SerializeObject (cm);
+        var body = JsonConvert.SerializeObject(cm);
 
-        webrequest.Enqueue (
+        webrequest.Enqueue(
           $"{ApiBase()}/chat",
           body,
-          (code, response) => { 
-            if (!ApiSuccess (code == 200))
+          (code, response) =>
+          {
+            if (!ApiSuccess(code == 200))
             {
-              ApiError (code, response);
+              ApiError(code, response);
             }
           },
           this,
@@ -143,19 +153,23 @@ namespace Oxide.Plugins
       }
     }
 
-    private bool ApiRequestOk() {
+    private bool ApiRequestOk()
+    {
       return (bool) PoundBot?.Call("ApiRequestOk");
     }
 
-    private string ApiBase() {
-      return (string)PoundBot?.Call("ApiBase");
+    private string ApiBase()
+    {
+      return (string) PoundBot?.Call("ApiBase");
     }
 
-    private bool ApiSuccess(bool success) {
+    private bool ApiSuccess(bool success)
+    {
       return (bool) PoundBot?.Call("ApiSuccess", success);
     }
 
-    private void ApiError(int code, string response) {
+    private void ApiError(int code, string response)
+    {
       PoundBot?.Call("ApiError", code, response);
     }
 
