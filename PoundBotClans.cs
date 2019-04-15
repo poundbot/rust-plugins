@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "1.0.0")]
+  [Info("Pound Bot Clans", "MrPoundsign", "1.0.1")]
   [Description("Clans support for PoundBot")]
 
   class PoundBotClans : RustPlugin
@@ -20,7 +20,7 @@ namespace Oxide.Plugins
     Plugin Clans;
 
     #region Oxide Hooks
-    private void LoadDefaultMessages()
+    protected override void LoadDefaultMessages()
     {
       lang.RegisterMessages(new Dictionary<string, string>
       {

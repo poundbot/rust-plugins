@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.2")]
+  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.3")]
   [Description("Better Chat relay for use with PoundBot")]
 
   class PoundBotBetterChat : RustPlugin
@@ -29,7 +29,7 @@ namespace Oxide.Plugins
     private List<Timer> chat_runners = new List<Timer>();
 
     #region Oxide Hooks
-    private void LoadDefaultMessages()
+    protected override void LoadDefaultMessages()
     {
       lang.RegisterMessages(
         new Dictionary<string, string>
