@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.0.0")]
+  [Info("Pound Bot", "MrPoundsign", "1.0.1")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : RustPlugin
@@ -46,6 +46,33 @@ namespace Oxide.Plugins
         this.CreatedAt = DateTime.UtcNow;
       }
     }
+
+    #region Configuration
+    protected override void LoadDefaultConfig()
+    {
+      Config["api_url"] = "http://poundbot.mrpoundsign.com/";
+      Config["api_key"] = "API KEY HERE";
+    }
+    
+    protected override void LoadDefaultMessages()
+    {
+      lang.RegisterMessages(new Dictionary<string, string>
+      {
+        ["connector.reconnected"] = "Reconnected with PoundBot",
+        ["connector.time_in_error"] = "Total time in error: {0}",
+        ["connector.error"] = "Error communicating with PoundBot: {0}/{1}",
+        ["connector.user_error"] = "Cannot connect to PoundBot right now. Please alert the admins.",
+        ["discord.pin"] = "Enter the following PIN to the bot in discord: {0}.",
+        ["discord.connected"] = "You are connected to discord.",
+        ["usage"] = "Usage: /pbreg \"<discord name>\"\n Example: /discord \"Fancy Guy#8080\"",
+      }, this);
+    }
+
+    void Loaded()
+    {
+      Connected();
+    }
+    #endregion
 
     #region API
 
@@ -137,36 +164,6 @@ namespace Oxide.Plugins
       }
       return success;
     }
-    #endregion
-
-    #region Configuration
-    protected override void LoadDefaultConfig()
-    {
-      Config["api_url"] = "http://poundbot.mrpoundsign.com/";
-      Config["api_key"] = "API KEY HERE";
-    }
-    #endregion
-
-    #region Oxide Hooks
-    private void LoadDefaultMessages()
-    {
-      lang.RegisterMessages(new Dictionary<string, string>
-      {
-        ["connector.reconnected"] = "Reconnected with PoundBot",
-        ["connector.time_in_error"] = "Total time in error: {0}",
-        ["connector.error"] = "Error communicating with PoundBot: {0}/{1}",
-        ["connector.user_error"] = "Cannot connect to PoundBot right now. Please alert the admins.",
-        ["discord.pin"] = "Enter the following PIN to the bot in discord: {0}.",
-        ["discord.connected"] = "You are connected to discord.",
-        ["usage"] = "Usage: /pbreg \"<discord name>\"\n Example: /discord \"Fancy Guy#8080\"",
-      }, this);
-    }
-
-    void Loaded()
-    {
-      Connected();
-    }
-    #endregion
 
     private void Connected()
     {
@@ -175,6 +172,7 @@ namespace Oxide.Plugins
         plugin.CallHook("OnPoundBotConnected");
       }
     }
+    #endregion
 
     #region Commands
     [ChatCommand("pbreg")]
