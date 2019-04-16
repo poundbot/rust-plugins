@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.4")]
+  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.5")]
   [Description("Better Chat relay for use with PoundBot")]
 
   class PoundBotBetterChat : RustPlugin
@@ -82,6 +82,7 @@ namespace Oxide.Plugins
 
     void StartChatRunners()
     {
+      if (chat_runners.Count != 0) { return; }
       if (PoundBot == null)
       {
         Puts("Waiting for PoundBot load before starting runners");
