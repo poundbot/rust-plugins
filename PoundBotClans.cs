@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "1.0.1")]
+  [Info("Pound Bot Clans", "MrPoundsign", "1.0.2")]
   [Description("Clans support for PoundBot")]
 
   class PoundBotClans : RustPlugin
@@ -24,7 +24,7 @@ namespace Oxide.Plugins
     {
       lang.RegisterMessages(new Dictionary<string, string>
       {
-        ["sending_clans"] = "Sending clans data to PoundBot",
+        ["sending_clans"] = "Sending all clans to PoundBot",
         ["sending_clan"] = "Sending clan {0} to PoundBot",
         ["sending_clan_delete"] = "Sending clan delete for {0} to PoundBot",
       }, this);
@@ -36,11 +36,10 @@ namespace Oxide.Plugins
     }
     #endregion
 
-    void OnPluginLoaded(Plugin name)
+    void OnPluginLoaded(Plugin p)
     {
-      if (name == Clans || name == PoundBot)
+      if (p.Name == "Clans" || p.Name == "PoundBot")
       {
-        Puts($"Plugin '{name}' has been loaded");
         SendClans();
       }
     }
@@ -49,7 +48,7 @@ namespace Oxide.Plugins
     {
       if (Clans == null)
       {
-        Puts("RustIO Clans not yet loaded.");
+        Puts("Clans not yet loaded.");
         return;
       }
       if (PoundBot == null)
@@ -57,60 +56,56 @@ namespace Oxide.Plugins
         Puts("PoundBot not yet loaded.");
         return;
       }
-      if (Clans != null && PoundBot != null)
+
+      var clan_tags = (JArray) Clans.Call("GetAllClans");
+      List<JObject> clans = new List<JObject>();
+      foreach (string ctag in clan_tags)
       {
-        var clan_tags = (JArray) Clans.Call("GetAllClans");
-        List<JObject> clans = new List<JObject>();
-        foreach (string ctag in clan_tags)
-        {
-          clans.Add((JObject) Clans.Call("GetClan", ctag));
-        }
-        var body = JsonConvert.SerializeObject(clans);
-
-        if (ApiRequestOk())
-        {
-          Puts(lang.GetMessage("sending_clans", this));
-          webrequest.Enqueue(
-            $"{ApiBase()}/clans",
-            body,
-            (code, response) =>
-            {
-              if (!ApiSuccess(code == 200))
-              {
-                ApiError(code, response);
-              }
-
-            },
-            this, RequestMethod.PUT, Headers(), 100f);
-        }
-        return;
+        clans.Add((JObject) Clans.Call("GetClan", ctag));
       }
-      Puts("Clans not loaded!");
+      var body = JsonConvert.SerializeObject(clans);
+
+      if (ApiRequestOk())
+      {
+        Puts(lang.GetMessage("sending_clans", this));
+        webrequest.Enqueue(
+          $"{ApiBase()}/clans",
+          body,
+          (code, response) =>
+          {
+            if (!ApiSuccess(code == 200))
+            {
+              ApiError(code, response);
+            }
+
+          },
+          this, RequestMethod.PUT, Headers(), 100f);
+      }
     }
 
     #region Clans Hooks
     void OnClanCreate(string tag)
     {
-      if (Clans != null)
+      if (Clans == null || PoundBot == null) return;
+
+      var clan = (JObject) Clans.Call("GetClan", tag);
+      var body = JsonConvert.SerializeObject(clan);
+
+      if (ApiRequestOk())
       {
-        var clan = (JObject) Clans.Call("GetClan", tag);
-        var body = JsonConvert.SerializeObject(clan);
-
-        if (ApiRequestOk())
-        {
-          Puts(string.Format(lang.GetMessage("sending_clan", this), tag));
-          webrequest.Enqueue(
-            $"{ApiBase()}/clans/{tag}",
-            body,
-            (code, response) =>
+        Puts(string.Format(lang.GetMessage("sending_clan", this), tag));
+        webrequest.Enqueue(
+          $"{ApiBase()}/clans/{tag}",
+          body,
+          (code, response) =>
+          {
+            if (!ApiSuccess(code == 200))
             {
-              if (!ApiSuccess(code == 200))
-              {
-                ApiError(code, response);
-              }
+              ApiError(code, response);
+            }
 
-            }, this, RequestMethod.PUT, Headers(), 100f);
-        }
+          }, this, RequestMethod.PUT, Headers(), 100f
+        );
       }
     }
 
@@ -118,6 +113,7 @@ namespace Oxide.Plugins
 
     void OnClanDestroy(string tag)
     {
+      if (Clans == null || PoundBot == null) return;
       if (ApiRequestOk())
       {
         Puts(string.Format(lang.GetMessage("sending_clan_delete", this), tag));
@@ -143,6 +139,7 @@ namespace Oxide.Plugins
 
     private bool ApiRequestOk()
     {
+      if (PoundBot == null) return false;
       return (bool) PoundBot?.Call("ApiRequestOk");
     }
 

@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.0.1")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.0.2")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -123,6 +123,7 @@ namespace Oxide.Plugins
 
     private bool ApiRequestOk()
     {
+      if (PoundBot == null) return false;
       return (bool) PoundBot?.Call("ApiRequestOk");
     }
 

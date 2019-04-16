@@ -1,24 +1,24 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Oxide.Core.Libraries;
+using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
+using System;
+using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.0.1")]
+  [Info("Pound Bot", "MrPoundsign", "1.0.2")]
   [Description("Connector for the Discord bot PoundBot.")]
 
-  class PoundBot : RustPlugin
+  class PoundBot : CovalencePlugin
   {
     protected int ApiRetrySeconds = 1;
     protected int ApiRetryNotify = 10;
 
-    protected bool ApiInError = false;
-    protected bool ApiRetry = false;
-    protected uint ApiRetryAttempts = 0;
+    protected bool ApiInError;
+    protected bool ApiRetry;
+    protected uint ApiRetryAttempts;
     protected DateTime ApiErrorTime;
     protected DateTime LastApiAttempt;
 
@@ -176,20 +176,20 @@ namespace Oxide.Plugins
 
     #region Commands
     [ChatCommand("pbreg")]
-    private void cmdPbreg(BasePlayer player, string command, string[] args)
+    private void CmdPbreg(IPlayer player, string command, string[] args)
     {
       if (!ApiRequestOk())
       {
-        PrintToChat(player, lang.GetMessage("connector.user_error", this, player.IPlayer.Id));
+        player.Message(lang.GetMessage("connector.user_error", this, player.Id));
         return;
       }
-      if (args.Count() != 1)
+      if (args.Length != 1)
       {
-        PrintToChat(player, lang.GetMessage("usage", this, player.IPlayer.Id));
+        player.Message(lang.GetMessage("usage", this, player.Id));
         return;
       }
 
-      var da = new DiscordAuth(player.displayName, args[0], player.userID);
+      var da = new DiscordAuth(player.Name, args[0], (ulong) Convert.ToUInt64(player.Id));
 
       var body = JsonConvert.SerializeObject(da);
 
@@ -200,11 +200,11 @@ namespace Oxide.Plugins
         {
           if (ApiSuccess(code == 200))
           {
-            PrintToChat(player, string.Format(lang.GetMessage("discord.pin", this, player.IPlayer.Id), da.Pin.ToString("D4")));
+            player.Message(string.Format(lang.GetMessage("discord.pin", this, player.Id), da.Pin.ToString("D4")));
           }
           else if (code == 405) // Method not allowed means we're already connected
           {
-            PrintToChat(player, lang.GetMessage("discord.connected", this, player.IPlayer.Id), da.Pin.ToString("D4"));
+            player.Message(lang.GetMessage("discord.connected", this, player.Id), da.Pin.ToString("D4"));
           }
           else
           {

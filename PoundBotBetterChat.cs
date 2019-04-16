@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.3")]
+  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.4")]
   [Description("Better Chat relay for use with PoundBot")]
 
   class PoundBotBetterChat : RustPlugin
@@ -16,7 +16,7 @@ namespace Oxide.Plugins
     [PluginReference]
     private Plugin PoundBot;
 
-    protected int ApiChatRunnersCount = 0;
+    protected int ApiChatRunnersCount;
 
     class ChatMessage
     {
@@ -42,19 +42,37 @@ namespace Oxide.Plugins
       );
     }
 
-    void OnServerInitialized()
+    void Loaded()
     {
-      StartChatRunners();
+      if (PoundBot != null) StartChatRunners();
     }
 
     void Unload()
     {
       KillChatRunners();
     }
+
+    void OnPluginLoaded(Plugin p)
+    {
+      if (p.Name == "PoundBot" || p.Name == "PoundBotBetterChat")
+      {
+        Puts($"Plugin '{p}' has been loaded");
+        StartChatRunners();
+      }
+    }
+
+    void OnPluginUnloaded(Plugin name)
+    {
+      if (name.Name == "PoundBot")
+      {
+        KillChatRunners();
+      }
+    }
     #endregion
 
     void KillChatRunners()
     {
+      Puts("Killing chat runners");
       foreach (var runner in chat_runners)
       {
         runner.Destroy();
@@ -64,14 +82,21 @@ namespace Oxide.Plugins
 
     void StartChatRunners()
     {
+      if (PoundBot == null)
+      {
+        Puts("Waiting for PoundBot load before starting runners");
+        return;
+      }
+      Puts("Starting chat runners");
       var runners_to_start = Enumerable.Range(1, 2);
       foreach (int i in runners_to_start)
       {
-        chat_runners.Add(startChatRunner());
+        Puts($"Started chat runner {i}");
+        chat_runners.Add(StartChatRunner());
       }
     }
 
-    private Timer startChatRunner()
+    private Timer StartChatRunner()
     {
       return timer.Every(1f, () =>
       {
@@ -94,7 +119,7 @@ namespace Oxide.Plugins
                     {
                       var chatName = message?.DisplayName;
                       var consoleName = message?.DisplayName;
-                      if ((chatName != null) && (message.ClanTag != ""))
+                      if ((chatName != null) && (message.ClanTag != String.Empty))
                       {
                         chatName = $"{string.Format(lang.GetMessage("chat.ClanTag", this), message.ClanTag)}{chatName}";
                         consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
@@ -118,6 +143,10 @@ namespace Oxide.Plugins
               Headers(),
               120000f
             );
+          }
+          else
+          {
+            Puts("API Not OK");
           }
         }
       });
@@ -155,6 +184,7 @@ namespace Oxide.Plugins
 
     private bool ApiRequestOk()
     {
+      if (PoundBot == null) return false;
       return (bool) PoundBot?.Call("ApiRequestOk");
     }
 
