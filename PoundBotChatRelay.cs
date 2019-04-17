@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.0.7")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.0.8")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : RustPlugin
@@ -190,41 +190,46 @@ namespace Oxide.Plugins
       return null;
     }
 
-    object OnMessagePlayer(string message, BasePlayer player)
+    object OnUserChat(IPlayer player, string message)
     {
       if (!(bool) Config["relay.chat"]) return null;
+
+      SendToPoundBot(player, message);
 
       return null;
     }
 
     void OnBetterChat(Dictionary<string, object> data)
     {
-      if ((bool) Config["relay.betterchat"] && ApiRequestOk())
-      {
-        IPlayer player = (IPlayer) data["Player"];
-        var cm = new ChatMessage { };
-        cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
-        cm.DisplayName = player.Name;
-        cm.Message = (string) data["Text"];
+      if (!(bool) Config["relay.betterchat"] || !ApiRequestOk()) return;
 
-        var body = JsonConvert.SerializeObject(cm);
+      SendToPoundBot((IPlayer) data["Player"], (string) data["Text"]);
+    }
 
-        webrequest.Enqueue(
-          $"{ApiBase()}/chat",
-          body,
-          (code, response) =>
+    void SendToPoundBot(IPlayer player, string message)
+    {
+      var cm = new ChatMessage { };
+      cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
+      cm.DisplayName = player.Name;
+      cm.Message = message;
+
+      var body = JsonConvert.SerializeObject(cm);
+
+      webrequest.Enqueue(
+        $"{ApiBase()}/chat",
+        body,
+        (code, response) =>
+        {
+          if (!ApiSuccess(code == 200))
           {
-            if (!ApiSuccess(code == 200))
-            {
-              ApiError(code, response);
-            }
-          },
-          this,
-          RequestMethod.POST,
-          Headers(),
-          100f
-        );
-      }
+            ApiError(code, response);
+          }
+        },
+        this,
+        RequestMethod.POST,
+        Headers(),
+        100f
+      );
     }
 
     private bool ApiRequestOk()
