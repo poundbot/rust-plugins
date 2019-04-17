@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.5")]
+  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.6")]
   [Description("Better Chat relay for use with PoundBot")]
 
   class PoundBotBetterChat : RustPlugin
@@ -144,10 +144,6 @@ namespace Oxide.Plugins
               Headers(),
               120000f
             );
-          }
-          else
-          {
-            Puts("API Not OK");
           }
         }
       });
