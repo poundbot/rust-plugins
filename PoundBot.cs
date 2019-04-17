@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.0.3")]
+  [Info("Pound Bot", "MrPoundsign", "1.0.4")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
@@ -204,7 +204,7 @@ namespace Oxide.Plugins
           }
           else if (code == 405) // Method not allowed means we're already connected
           {
-            player.Message(lang.GetMessage("discord.connected", this, player.Id), da.Pin.ToString("D4"));
+            player.Message(lang.GetMessage("discord.connected", this, player.Id));
           }
           else
           {

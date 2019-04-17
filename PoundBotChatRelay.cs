@@ -8,10 +8,10 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Better Chat", "MrPoundsign", "1.0.6")]
-  [Description("Better Chat relay for use with PoundBot")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.0.7")]
+  [Description("Chat relay for use with PoundBot")]
 
-  class PoundBotBetterChat : RustPlugin
+  class PoundBotChatRelay : RustPlugin
   {
     [PluginReference]
     private Plugin PoundBot;
@@ -28,18 +28,27 @@ namespace Oxide.Plugins
 
     private List<Timer> chat_runners = new List<Timer>();
 
+    #region Configuration
+    protected override void LoadDefaultConfig()
+    {
+      Config["relay.chat"] = true;
+      Config["relay.serverchat"] = true;
+      Config["relay.discordchat"] = true;
+      Config["relay.betterchat"] = false;
+    }
+    #endregion
+
     #region Oxide Hooks
     protected override void LoadDefaultMessages()
     {
       lang.RegisterMessages(
         new Dictionary<string, string>
-        { { "chat.ClanTag", "<color=blue>[{0}]</color> " },
-          { "chat.Msg", "<color=red>{{DSCD}}</color> <color=orange>{0}</color>: {1}" },
-          { "console.ClanTag", "[{0}] " },
-          { "console.Msg", "{{DSCD}} {0}: {1}" },
-        },
-        this
-      );
+        {
+          ["chat.ClanTag"] = "<color=blue>[{0}]</color> ",
+          ["chat.Msg"] = "<color=red>{{DSCD}}</color> <color=orange>{0}</color>: {1}",
+          ["console.ClanTag"] = "[{0}] ",
+          ["console.Msg"] = "{{DSCD}} {0}: {1}",
+        }, this);
     }
 
     void Loaded()
@@ -54,7 +63,8 @@ namespace Oxide.Plugins
 
     void OnPluginLoaded(Plugin p)
     {
-      if (p.Name == "PoundBot" || p.Name == "PoundBotBetterChat")
+      if (!(bool) Config["relay.discordchat"]) return;
+      if (p.Name == "PoundBot")
       {
         Puts($"Plugin '{p}' has been loaded");
         StartChatRunners();
@@ -63,6 +73,7 @@ namespace Oxide.Plugins
 
     void OnPluginUnloaded(Plugin name)
     {
+      if (!(bool) Config["relay.discordchat"]) return;
       if (name.Name == "PoundBot")
       {
         KillChatRunners();
@@ -72,6 +83,7 @@ namespace Oxide.Plugins
 
     void KillChatRunners()
     {
+      if (!(bool) Config["relay.discordchat"]) return;
       Puts("Killing chat runners");
       foreach (var runner in chat_runners)
       {
@@ -82,6 +94,7 @@ namespace Oxide.Plugins
 
     void StartChatRunners()
     {
+      if (!(bool) Config["relay.discordchat"]) return;
       if (chat_runners.Count != 0) { return; }
       if (PoundBot == null)
       {
@@ -99,6 +112,7 @@ namespace Oxide.Plugins
 
     private Timer StartChatRunner()
     {
+      if (!(bool) Config["relay.discordchat"]) return null;
       return timer.Every(1f, () =>
       {
         if (ApiChatRunnersCount < 2)
@@ -149,9 +163,44 @@ namespace Oxide.Plugins
       });
     }
 
+    object OnServerMessage(string message, string name, string color, ulong id)
+    {
+      if ((bool) Config["relay.serverchat"] || !ApiRequestOk()) return null;
+      var cm = new ChatMessage { };
+      cm.DisplayName = name;
+      cm.Message = message;
+
+      var body = JsonConvert.SerializeObject(cm);
+
+      webrequest.Enqueue(
+        $"{ApiBase()}/chat",
+        body,
+        (code, response) =>
+        {
+          if (!ApiSuccess(code == 200))
+          {
+            ApiError(code, response);
+          }
+        },
+        this,
+        RequestMethod.POST,
+        Headers(),
+        100f
+      );
+      return null;
+    }
+
+    object OnMessagePlayer(string message, BasePlayer player)
+    {
+      if (!(bool) Config["relay.chat"]) return null;
+
+      Puts("OnMessagePlayer works!");
+      return null;
+    }
+
     void OnBetterChat(Dictionary<string, object> data)
     {
-      if (ApiRequestOk())
+      if ((bool) Config["relay.betterchat"] && ApiRequestOk())
       {
         IPlayer player = (IPlayer) data["Player"];
         var cm = new ChatMessage { };
@@ -203,7 +252,7 @@ namespace Oxide.Plugins
     private Dictionary<string, string> Headers()
     {
       var headers = (Dictionary<string, string>) PoundBot?.Call("Headers");
-      headers["X-PoundBotBetterChat-Version"] = Version.ToString();
+      headers["X-PoundBotChatRelay-Version"] = Version.ToString();
       return headers;
     }
   }
