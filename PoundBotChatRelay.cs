@@ -165,7 +165,7 @@ namespace Oxide.Plugins
 
     object OnServerMessage(string message, string name, string color, ulong id)
     {
-      if ((bool) Config["relay.serverchat"] || !ApiRequestOk()) return null;
+      if (!(bool) Config["relay.serverchat"] || !ApiRequestOk()) return null;
       var cm = new ChatMessage { };
       cm.DisplayName = name;
       cm.Message = message;
@@ -194,7 +194,6 @@ namespace Oxide.Plugins
     {
       if (!(bool) Config["relay.chat"]) return null;
 
-      Puts("OnMessagePlayer works!");
       return null;
     }
 
