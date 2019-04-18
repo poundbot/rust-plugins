@@ -1,5 +1,4 @@
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
@@ -8,13 +7,13 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.0.4")]
+  [Info("Pound Bot", "MrPoundsign", "1.0.6")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
   {
     protected int ApiRetrySeconds = 1;
-    protected int ApiRetryNotify = 10;
+    protected int ApiRetryNotify = 30;
 
     protected bool ApiInError;
     protected bool ApiRetry;

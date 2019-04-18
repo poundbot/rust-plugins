@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.0.2")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.0.3")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -110,7 +110,7 @@ namespace Oxide.Plugins
 
     public string NumberToLetter(int num)
     {
-      int num1 = Mathf.FloorToInt((float) (num / 26));
+      int num1 = Mathf.FloorToInt((num / 26));
       int num2 = num % 26;
       string empty = string.Empty;
       if (num1 > 0)

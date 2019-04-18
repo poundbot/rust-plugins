@@ -1,23 +1,20 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Oxide.Core.Libraries;
 using Oxide.Core.Plugins;
-using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "1.0.2")]
+  [Info("Pound Bot Clans", "MrPoundsign", "1.0.3")]
   [Description("Clans support for PoundBot")]
 
   class PoundBotClans : RustPlugin
   {
     [PluginReference]
-    Plugin PoundBot;
+    private Plugin PoundBot;
     [PluginReference]
-    Plugin Clans;
+    private Plugin Clans;
 
     #region Oxide Hooks
     protected override void LoadDefaultMessages()
