@@ -10,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.0.9")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.0.10")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : RustPlugin
@@ -21,10 +21,7 @@ namespace Oxide.Plugins
     protected int ApiChatRunnersCount;
     private Dictionary<string, string> RequestHeaders;
     private string ChatURI;
-    private bool RelayBetterChat;
-    private bool RelayChat;
     private bool RelayDiscordChat;
-    private bool RelayServerChat;
 
     class ChatMessage
     {
@@ -64,10 +61,20 @@ namespace Oxide.Plugins
       RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
       RequestHeaders["X-PoundBotChatRelay-Version"] = Version.ToString();
       ChatURI = $"{(string)PoundBot?.Call("ApiBase")}/chat";
-      RelayBetterChat = (bool)Config["relay.betterchat"];
-      RelayChat = (bool)Config["relay.chat"];
+      if (!(bool)Config["relay.betterchat"])
+      {
+        Unsubscribe("OnBetterChat");
+      }
+      if(!(bool)Config["relay.chat"])
+      {
+        Unsubscribe("OnUserChat");
+      }
+      if (!(bool)Config["relay.serverchat"])
+      {
+        Unsubscribe("OnServerMessage");
+      }
+
       RelayDiscordChat = (bool)Config["relay.discordchat"];
-      RelayServerChat = (bool)Config["relay.serverchat"];
       StartChatRunners();
     }
 
@@ -85,9 +92,11 @@ namespace Oxide.Plugins
       chat_runners.Clear();
     }
 
+    // Chat runners connect to PoundBot and wait for new chat messages
+    // from Discord to send to global chat
     void StartChatRunners()
     {
-      if ((!RelayChat && !RelayBetterChat) || chat_runners.Count != 0) return;
+      if (!RelayDiscordChat || chat_runners.Count != 0) return;
 
       Puts("Starting chat runners");
       var runners_to_start = Enumerable.Range(1, 2);
@@ -145,7 +154,7 @@ namespace Oxide.Plugins
 
     void OnServerMessage(string message, string name, string color, ulong id)
     {
-      if (!RelayServerChat || !ApiRequestOk()) return;
+      if (!ApiRequestOk()) return;
       var cm = new ChatMessage { };
       cm.DisplayName = name;
       cm.Message = message;
@@ -155,15 +164,13 @@ namespace Oxide.Plugins
 
     void OnUserChat(IPlayer player, string message)
     {
-      if (!RelayChat || !ApiRequestOk()) return;
+      if (!ApiRequestOk()) return;
 
       SendToPoundBot(IPlayerMessage(player, message));
     }
 
     void OnBetterChat(Dictionary<string, object> data)
     {
-      if (!RelayBetterChat || !ApiRequestOk()) return;
-
       SendToPoundBot(IPlayerMessage((IPlayer)data["Player"], (string)data["Text"]));
     }
 
