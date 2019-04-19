@@ -1,3 +1,6 @@
+// Requires: PoundBot
+// Requires: Clans
+
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -6,15 +9,16 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "1.0.3")]
+  [Info("Pound Bot Clans", "MrPoundsign", "1.0.4")]
   [Description("Clans support for PoundBot")]
 
   class PoundBotClans : RustPlugin
   {
     [PluginReference]
-    private Plugin PoundBot;
-    [PluginReference]
-    private Plugin Clans;
+    private Plugin PoundBot, Clans;
+
+    private Dictionary<string, string> RequestHeaders;
+    private string ClansURI;
 
     #region Oxide Hooks
     protected override void LoadDefaultMessages()
@@ -26,39 +30,23 @@ namespace Oxide.Plugins
         ["sending_clan_delete"] = "Sending clan delete for {0} to PoundBot",
       }, this);
     }
-
-    void Loaded()
-    {
-      SendClans();
-    }
     #endregion
 
-    void OnPluginLoaded(Plugin p)
+    void OnServerInitialized()
     {
-      if (p.Name == "Clans" || p.Name == "PoundBot")
-      {
-        SendClans();
-      }
+      RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
+      RequestHeaders["X-PoundBotChatRelay-Version"] = Version.ToString();
+      ClansURI = $"{(string)PoundBot?.Call("ApiBase")}/clans";
+      SendClans();
     }
 
     void SendClans()
     {
-      if (Clans == null)
-      {
-        Puts("Clans not yet loaded.");
-        return;
-      }
-      if (PoundBot == null)
-      {
-        Puts("PoundBot not yet loaded.");
-        return;
-      }
-
-      var clan_tags = (JArray) Clans.Call("GetAllClans");
+      var clan_tags = (JArray)Clans.Call("GetAllClans");
       List<JObject> clans = new List<JObject>();
       foreach (string ctag in clan_tags)
       {
-        clans.Add((JObject) Clans.Call("GetClan", ctag));
+        clans.Add((JObject)Clans.Call("GetClan", ctag));
       }
       var body = JsonConvert.SerializeObject(clans);
 
@@ -66,7 +54,7 @@ namespace Oxide.Plugins
       {
         Puts(lang.GetMessage("sending_clans", this));
         webrequest.Enqueue(
-          $"{ApiBase()}/clans",
+          ClansURI,
           body,
           (code, response) =>
           {
@@ -76,23 +64,21 @@ namespace Oxide.Plugins
             }
 
           },
-          this, RequestMethod.PUT, Headers(), 100f);
+          this, RequestMethod.PUT, RequestHeaders, 100f);
       }
     }
 
     #region Clans Hooks
     void OnClanCreate(string tag)
     {
-      if (Clans == null || PoundBot == null) return;
-
-      var clan = (JObject) Clans.Call("GetClan", tag);
+      var clan = (JObject)Clans.Call("GetClan", tag);
       var body = JsonConvert.SerializeObject(clan);
 
       if (ApiRequestOk())
       {
         Puts(string.Format(lang.GetMessage("sending_clan", this), tag));
         webrequest.Enqueue(
-          $"{ApiBase()}/clans/{tag}",
+          $"{ClansURI}/{tag}",
           body,
           (code, response) =>
           {
@@ -101,7 +87,7 @@ namespace Oxide.Plugins
               ApiError(code, response);
             }
 
-          }, this, RequestMethod.PUT, Headers(), 100f
+          }, this, RequestMethod.PUT, RequestHeaders, 100f
         );
       }
     }
@@ -110,56 +96,32 @@ namespace Oxide.Plugins
 
     void OnClanDestroy(string tag)
     {
-      if (Clans == null || PoundBot == null) return;
-      if (ApiRequestOk())
-      {
-        Puts(string.Format(lang.GetMessage("sending_clan_delete", this), tag));
-        webrequest.Enqueue(
-          $"{ApiBase()}/clans/{tag}",
-          null,
-          (code, response) =>
-          {
-            if (!ApiSuccess(code == 200))
-            {
-              ApiError(code, response);
-            }
+      if (!ApiRequestOk()) return;
 
-          }, this, RequestMethod.DELETE, Headers(), 100f);
-      }
+      Puts(string.Format(lang.GetMessage("sending_clan_delete", this), tag));
+      webrequest.Enqueue(
+        $"{ClansURI}/{tag}", null,
+        (code, response) => { if (!ApiSuccess(code == 200)) ApiError(code, response); },
+        this, RequestMethod.DELETE, RequestHeaders, 100f);
     }
     #endregion
 
-    void OnPoundBotConnected()
-    {
-      SendClans();
-    }
+    // Re-send all clans if PoundBot reconnects
+    void OnPoundBotConnected() { SendClans(); }
 
     private bool ApiRequestOk()
     {
-      if (PoundBot == null) return false;
-      return (bool) PoundBot?.Call("ApiRequestOk");
-    }
-
-    private string ApiBase()
-    {
-      return (string) PoundBot?.Call("ApiBase");
+      return (bool)PoundBot?.Call("ApiRequestOk");
     }
 
     private bool ApiSuccess(bool success)
     {
-      return (bool) PoundBot?.Call("ApiSuccess", success);
+      return (bool)PoundBot?.Call("ApiSuccess", success);
     }
 
     private void ApiError(int code, string response)
     {
       PoundBot?.Call("ApiError", code, response);
-    }
-
-    private Dictionary<string, string> Headers()
-    {
-      var headers = (Dictionary<string, string>) PoundBot?.Call("Headers");
-      headers["X-PoundBotClans-Version"] = Version.ToString();
-      return headers;
     }
   }
 }

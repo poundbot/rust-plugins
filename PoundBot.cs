@@ -7,7 +7,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.0.6")]
+  [Info("Pound Bot", "MrPoundsign", "1.0.4")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
@@ -98,7 +98,7 @@ namespace Oxide.Plugins
         ApiRetryAttempts++;
         if (ApiRetryAttempts == 1 || ApiRetryAttempts % ApiRetryNotify == 0)
         {
-          Puts(string.Format(lang.GetMessage("connector.time_in_error", this), DateTime.Now.Subtract(ApiErrorTime).ToShortString()));
+          Puts(string.Format(lang.GetMessage("connector.time_in_error", this), DateTime.Now.Subtract(ApiErrorTime)));
         }
         ApiRetry = true;
       }
@@ -155,7 +155,7 @@ namespace Oxide.Plugins
       if (ApiInError && success)
       {
         Puts(lang.GetMessage("connector.reconnected", this));
-        Puts(string.Format(lang.GetMessage("connector.time_in_error", this), DateTime.Now.Subtract(ApiErrorTime).ToShortString()));
+        Puts(string.Format(lang.GetMessage("connector.time_in_error", this), DateTime.Now.Subtract(ApiErrorTime)));
         ApiRetryAttempts = 0;
         ApiInError = false;
         ApiRetry = true;

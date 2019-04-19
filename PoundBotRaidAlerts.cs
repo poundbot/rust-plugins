@@ -1,3 +1,5 @@
+// Requires: PoundBot
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,13 +10,17 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.0.3")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.0.4")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
   {
     [PluginReference]
     private Plugin PoundBot;
+
+    private Dictionary<string, string> RequestHeaders;
+    private string EntityDeathURI;
+    private bool ShowOwnDamage;
 
     class EntityDeath
     {
@@ -39,14 +45,20 @@ namespace Oxide.Plugins
     }
     #endregion
 
+    void OnServerInitialized()
+    {
+      RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
+      RequestHeaders["X-PoundRaidAlerts-Version"] = Version.ToString();
+      EntityDeathURI = $"{(string)PoundBot?.Call("ApiBase")}/entity_death";
+      ShowOwnDamage = (bool)Config["show_own_damage"];
+    }
+
     void OnEntityDeath(BaseEntity victim, HitInfo info)
     {
       if (!(victim is DecayEntity) &&
         !(victim is StorageContainer) &&
         !(victim is BaseVehicle)
       ) return;
-
-      if (info?.Initiator == null) return;
       SendEntityDeath(victim, info?.Initiator);
     }
 
@@ -58,10 +70,10 @@ namespace Oxide.Plugins
       if (initiator is NPCMurderer) return;
       if (initiator is BasePlayer)
       {
-        var player = (BasePlayer) initiator;
-
         if (entity.OwnerID == 0) return;
-        if (!(bool) Config["show_own_damage"] && entity.OwnerID == player.userID) return;
+        var player = (BasePlayer)initiator;
+
+        if (!ShowOwnDamage && entity.OwnerID == player.userID) return;
 
         var priv = entity.GetBuildingPrivilege();
         ulong[] owners;
@@ -76,7 +88,7 @@ namespace Oxide.Plugins
         }
 
         string[] words = entity.ShortPrefabName.Split('/');
-        var name = words[words.Length - 1].Split('.') [0];
+        var name = words[words.Length - 1].Split('.')[0];
 
         var di = new EntityDeath(name, GridPos(entity), owners);
         var body = JsonConvert.SerializeObject(di);
@@ -84,16 +96,9 @@ namespace Oxide.Plugins
         if (ApiRequestOk())
         {
           webrequest.Enqueue(
-            $"{ApiBase()}/entity_death",
-            body,
-            (code, response) =>
-            {
-              if (!ApiSuccess(code == 200)) { ApiError(code, response); }
-            },
-            this,
-            RequestMethod.PUT,
-            Headers(),
-            100f
+            EntityDeathURI, body,
+            (code, response) => { if (!ApiSuccess(code == 200)) { ApiError(code, response); } },
+            this, RequestMethod.PUT, RequestHeaders, 100f
           );
         }
       }
@@ -103,14 +108,14 @@ namespace Oxide.Plugins
     {
       var size = World.Size;
       var gridCellSize = 150;
-      var num2 = (int) (entity.transform.position.x + (size / 2)) / gridCellSize;
-      var index = Math.Abs((int) (entity.transform.position.z - (size / 2)) / gridCellSize);
+      var num2 = (int)(entity.transform.position.x + (size / 2)) / gridCellSize;
+      var index = Math.Abs((int)(entity.transform.position.z - (size / 2)) / gridCellSize);
       return $"{this.NumberToLetter(num2) + index.ToString()}";
     }
 
     public string NumberToLetter(int num)
     {
-      int num1 = Mathf.FloorToInt((num / 26));
+      int num1 = Mathf.FloorToInt(num / 26);
       int num2 = num % 26;
       string empty = string.Empty;
       if (num1 > 0)
@@ -123,30 +128,17 @@ namespace Oxide.Plugins
 
     private bool ApiRequestOk()
     {
-      if (PoundBot == null) return false;
-      return (bool) PoundBot?.Call("ApiRequestOk");
-    }
-
-    private string ApiBase()
-    {
-      return (string) PoundBot?.Call("ApiBase");
+      return (bool)PoundBot?.Call("ApiRequestOk");
     }
 
     private bool ApiSuccess(bool success)
     {
-      return (bool) PoundBot?.Call("ApiSuccess", success);
+      return (bool)PoundBot?.Call("ApiSuccess", success);
     }
 
     private void ApiError(int code, string response)
     {
       PoundBot?.Call("ApiError", code, response);
-    }
-
-    private Dictionary<string, string> Headers()
-    {
-      var headers = (Dictionary<string, string>) PoundBot?.Call("Headers");
-      headers["X-PoundBotRaidAlerts-Version"] = Version.ToString();
-      return headers;
     }
   }
 }

@@ -1,3 +1,5 @@
+// Requires: PoundBot
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.0.8")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.0.9")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : RustPlugin
@@ -17,6 +19,12 @@ namespace Oxide.Plugins
     private Plugin PoundBot;
 
     protected int ApiChatRunnersCount;
+    private Dictionary<string, string> RequestHeaders;
+    private string ChatURI;
+    private bool RelayBetterChat;
+    private bool RelayChat;
+    private bool RelayDiscordChat;
+    private bool RelayServerChat;
 
     class ChatMessage
     {
@@ -44,46 +52,31 @@ namespace Oxide.Plugins
       lang.RegisterMessages(
         new Dictionary<string, string>
         {
-          ["chat.ClanTag"] = "<color=blue>[{0}]</color> ",
-          ["chat.Msg"] = "<color=red>{{DSCD}}</color> <color=orange>{0}</color>: {1}",
+          ["chat.ClanTag"] = "[{0}] ",
+          ["chat.Msg"] = "{{DSCD}} {0}: {1}",
           ["console.ClanTag"] = "[{0}] ",
           ["console.Msg"] = "{{DSCD}} {0}: {1}",
         }, this);
     }
 
-    void Loaded()
+    void OnServerInitialized()
     {
-      if (PoundBot != null) StartChatRunners();
+      RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
+      RequestHeaders["X-PoundBotChatRelay-Version"] = Version.ToString();
+      ChatURI = $"{(string)PoundBot?.Call("ApiBase")}/chat";
+      RelayBetterChat = (bool)Config["relay.betterchat"];
+      RelayChat = (bool)Config["relay.chat"];
+      RelayDiscordChat = (bool)Config["relay.discordchat"];
+      RelayServerChat = (bool)Config["relay.serverchat"];
+      StartChatRunners();
     }
 
-    void Unload()
-    {
-      KillChatRunners();
-    }
-
-    void OnPluginLoaded(Plugin p)
-    {
-      if (!(bool) Config["relay.discordchat"]) return;
-      if (p.Name == "PoundBot")
-      {
-        Puts($"Plugin '{p}' has been loaded");
-        StartChatRunners();
-      }
-    }
-
-    void OnPluginUnloaded(Plugin name)
-    {
-      if (!(bool) Config["relay.discordchat"]) return;
-      if (name.Name == "PoundBot")
-      {
-        KillChatRunners();
-      }
-    }
+    void Unload() { KillChatRunners(); }
     #endregion
 
     void KillChatRunners()
     {
-      if (!(bool) Config["relay.discordchat"]) return;
+      if (!RelayDiscordChat) return;
       Puts("Killing chat runners");
       foreach (var runner in chat_runners)
       {
@@ -94,13 +87,8 @@ namespace Oxide.Plugins
 
     void StartChatRunners()
     {
-      if (!(bool) Config["relay.discordchat"]) return;
-      if (chat_runners.Count != 0) { return; }
-      if (PoundBot == null)
-      {
-        Puts("Waiting for PoundBot load before starting runners");
-        return;
-      }
+      if ((!RelayChat && !RelayBetterChat) || chat_runners.Count != 0) return;
+
       Puts("Starting chat runners");
       var runners_to_start = Enumerable.Range(1, 2);
       foreach (int i in runners_to_start)
@@ -112,152 +100,107 @@ namespace Oxide.Plugins
 
     private Timer StartChatRunner()
     {
-      if (!(bool) Config["relay.discordchat"]) return null;
       return timer.Every(1f, () =>
       {
-        if (ApiChatRunnersCount < 2)
+        if (ApiChatRunnersCount < 2 && ApiRequestOk())
         {
-          if (ApiRequestOk())
-          {
-            ApiChatRunnersCount++;
-            webrequest.Enqueue(
-              $"{ApiBase()}/chat",
-              null,
-              (code, response) =>
+          ApiChatRunnersCount++;
+          webrequest.Enqueue(
+            ChatURI, null,
+            (code, response) =>
+            {
+              ApiChatRunnersCount--;
+              switch (code)
               {
-                ApiChatRunnersCount--;
-                switch (code)
-                {
-                  case 200:
-                    ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
-                    if (message != null)
+                case 200:
+                  ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
+                  if (message != null)
+                  {
+                    var chatName = message?.DisplayName;
+                    var consoleName = message?.DisplayName;
+                    if ((chatName != null) && (message.ClanTag != String.Empty))
                     {
-                      var chatName = message?.DisplayName;
-                      var consoleName = message?.DisplayName;
-                      if ((chatName != null) && (message.ClanTag != String.Empty))
-                      {
-                        chatName = $"{string.Format(lang.GetMessage("chat.ClanTag", this), message.ClanTag)}{chatName}";
-                        consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
-                      }
-                      Puts(string.Format(lang.GetMessage("console.Msg", this), consoleName, message?.Message));
-                      PrintToChat(string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message));
+                      chatName = $"{string.Format(lang.GetMessage("chat.ClanTag", this), message.ClanTag)}{chatName}";
+                      consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
                     }
-                    ApiSuccess(true);
-                    break;
-                  case 204:
-                    ApiSuccess(true);
-                    break;
-                  default:
-                    ApiError(code, response);
-                    break;
-                }
+                    Puts(string.Format(lang.GetMessage("console.Msg", this), consoleName, message?.Message));
+                    PrintToChat(string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message));
+                  }
+                  ApiSuccess(true);
+                  break;
+                case 204:
+                  ApiSuccess(true);
+                  break;
+                default:
+                  ApiError(code, response);
+                  break;
+              }
 
-              },
-              this,
-              RequestMethod.GET,
-              Headers(),
-              120000f
-            );
-          }
+            },
+            this, RequestMethod.GET, RequestHeaders, 120000f
+          );
         }
       });
     }
 
-    object OnServerMessage(string message, string name, string color, ulong id)
+    void OnServerMessage(string message, string name, string color, ulong id)
     {
-      if (!(bool) Config["relay.serverchat"] || !ApiRequestOk()) return null;
+      if (!RelayServerChat || !ApiRequestOk()) return;
       var cm = new ChatMessage { };
       cm.DisplayName = name;
       cm.Message = message;
 
-      var body = JsonConvert.SerializeObject(cm);
-
-      webrequest.Enqueue(
-        $"{ApiBase()}/chat",
-        body,
-        (code, response) =>
-        {
-          if (!ApiSuccess(code == 200))
-          {
-            ApiError(code, response);
-          }
-        },
-        this,
-        RequestMethod.POST,
-        Headers(),
-        100f
-      );
-      return null;
+      SendToPoundBot(cm);
     }
 
-    object OnUserChat(IPlayer player, string message)
+    void OnUserChat(IPlayer player, string message)
     {
-      if (!(bool) Config["relay.chat"]) return null;
+      if (!RelayChat || !ApiRequestOk()) return;
 
-      SendToPoundBot(player, message);
-
-      return null;
+      SendToPoundBot(IPlayerMessage(player, message));
     }
 
     void OnBetterChat(Dictionary<string, object> data)
     {
-      if (!(bool) Config["relay.betterchat"] || !ApiRequestOk()) return;
+      if (!RelayBetterChat || !ApiRequestOk()) return;
 
-      SendToPoundBot((IPlayer) data["Player"], (string) data["Text"]);
+      SendToPoundBot(IPlayerMessage((IPlayer)data["Player"], (string)data["Text"]));
     }
 
-    void SendToPoundBot(IPlayer player, string message)
+    private ChatMessage IPlayerMessage(IPlayer player, string message)
     {
       var cm = new ChatMessage { };
-      cm.SteamID = (ulong) Convert.ToUInt64(player.Id);
+      cm.SteamID = (ulong)Convert.ToUInt64(player.Id);
       cm.DisplayName = player.Name;
       cm.Message = message;
 
+      return cm;
+    }
+
+    void SendToPoundBot(ChatMessage cm)
+    {
       var body = JsonConvert.SerializeObject(cm);
 
       webrequest.Enqueue(
-        $"{ApiBase()}/chat",
-        body,
-        (code, response) =>
-        {
-          if (!ApiSuccess(code == 200))
-          {
-            ApiError(code, response);
-          }
-        },
-        this,
-        RequestMethod.POST,
-        Headers(),
-        100f
+        ChatURI, body,
+        (code, response) => { if (!ApiSuccess(code == 200)) ApiError(code, response); },
+        this, RequestMethod.POST, RequestHeaders, 100f
       );
     }
 
     private bool ApiRequestOk()
     {
-      if (PoundBot == null) return false;
-      return (bool) PoundBot?.Call("ApiRequestOk");
-    }
-
-    private string ApiBase()
-    {
-      return (string) PoundBot?.Call("ApiBase");
+      return (bool)PoundBot?.Call("ApiRequestOk");
     }
 
     private bool ApiSuccess(bool success)
     {
-      return (bool) PoundBot?.Call("ApiSuccess", success);
+      return (bool)PoundBot?.Call("ApiSuccess", success);
     }
 
     private void ApiError(int code, string response)
     {
       PoundBot?.Call("ApiError", code, response);
-    }
-
-    private Dictionary<string, string> Headers()
-    {
-      var headers = (Dictionary<string, string>) PoundBot?.Call("Headers");
-      headers["X-PoundBotChatRelay-Version"] = Version.ToString();
-      return headers;
     }
   }
 }
