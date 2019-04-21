@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.0.4")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.1.0")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -26,15 +26,15 @@ namespace Oxide.Plugins
     {
       public string Name;
       public string GridPos;
-      public ulong[] Owners;
+      public string[] OwnerIDs;
       public DateTime CreatedAt;
 
-      public EntityDeath(string name, string gridpos, ulong[] owners)
+      public EntityDeath(string name, string gridpos, string[] ownerIDs)
       {
-        this.Name = name;
-        this.GridPos = gridpos;
-        this.Owners = owners;
-        this.CreatedAt = DateTime.UtcNow;
+        Name = name;
+        GridPos = gridpos;
+        OwnerIDs = ownerIDs;
+        CreatedAt = DateTime.UtcNow;
       }
     }
 
@@ -76,15 +76,15 @@ namespace Oxide.Plugins
         if (!ShowOwnDamage && entity.OwnerID == player.userID) return;
 
         var priv = entity.GetBuildingPrivilege();
-        ulong[] owners;
+        string[] owners;
 
         if (priv != null)
         {
-          owners = priv.authorizedPlayers.Select(id => { return id.userid; }).ToArray();
+          owners = priv.authorizedPlayers.Select(p => { return p.userid.ToString(); }).ToArray();
         }
         else
         {
-          owners = new ulong[] { entity.OwnerID };
+          owners = new string[] { entity.OwnerID.ToString() };
         }
 
         string[] words = entity.ShortPrefabName.Split('/');

@@ -7,11 +7,12 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.0.4")]
+  [Info("Pound Bot", "MrPoundsign", "1.1.0")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
   {
+    private string ApiBaseURI;
     protected int ApiRetrySeconds = 1;
     protected int ApiRetryNotify = 30;
 
@@ -20,6 +21,7 @@ namespace Oxide.Plugins
     protected uint ApiRetryAttempts;
     protected DateTime ApiErrorTime;
     protected DateTime LastApiAttempt;
+    private Dictionary<string, string> RequestHeaders;
 
     class ApiErrorResponse
     {
@@ -28,21 +30,21 @@ namespace Oxide.Plugins
 
     class DiscordAuth
     {
-      public ulong SteamID;
+      public string PlayerID;
       public string DisplayName;
       public string ClanTag;
       public string DiscordName;
       public int Pin;
       public DateTime CreatedAt;
 
-      public DiscordAuth(string displayname, string discordName, ulong steamid)
+      public DiscordAuth(string displayname, string discordName, string playerid)
       {
-        System.Random rnd = new System.Random();
-        this.DisplayName = displayname;
-        this.DiscordName = discordName;
-        this.SteamID = steamid;
-        this.Pin = rnd.Next(1, 9999);
-        this.CreatedAt = DateTime.UtcNow;
+        Random rnd = new Random();
+        DisplayName = displayname;
+        DiscordName = discordName;
+        PlayerID = playerid;
+        Pin = rnd.Next(1, 9999);
+        CreatedAt = DateTime.UtcNow;
       }
     }
 
@@ -52,7 +54,7 @@ namespace Oxide.Plugins
       Config["api_url"] = "http://poundbot.mrpoundsign.com/";
       Config["api_key"] = "API KEY HERE";
     }
-    
+
     protected override void LoadDefaultMessages()
     {
       lang.RegisterMessages(new Dictionary<string, string>
@@ -69,6 +71,15 @@ namespace Oxide.Plugins
 
     void Loaded()
     {
+      ApiBaseURI = $"{Config["api_url"]}api";
+      RequestHeaders = new Dictionary<string, string>
+      {
+        ["Content-type"] = "application/json",
+        ["Authorization"] = $"Token {Config["api_key"]}",
+        ["X-PoundBotConnector-Version"] = Version.ToString(),
+        ["User-Agent"] = $"PoundBotConnector/{Version.ToString()}",
+        ["X-PoundBot-Game"] = covalence.Game.ToLower()
+      };
       Connected();
     }
     #endregion
@@ -77,18 +88,12 @@ namespace Oxide.Plugins
 
     private Dictionary<string, string> Headers()
     {
-      return new Dictionary<string, string>
-      {
-        ["Content-type"] = "application/json",
-        ["Authorization"] = $"Token {Config["api_key"]}",
-        ["X-PoundBotConnector-Version"] = Version.ToString(),
-        ["User-Agent"] = $"PoundBotConnector/{Version.ToString()}",
-      };
+      return RequestHeaders;
     }
 
     private string ApiBase()
     {
-      return $"{Config["api_url"]}api";
+      return ApiBaseURI;
     }
 
     private bool ApiRequestOk()
@@ -188,7 +193,7 @@ namespace Oxide.Plugins
         return;
       }
 
-      var da = new DiscordAuth(player.Name, args[0], (ulong) Convert.ToUInt64(player.Id));
+      var da = new DiscordAuth(player.Name, args[0], player.Id);
 
       var body = JsonConvert.SerializeObject(da);
 
@@ -205,10 +210,7 @@ namespace Oxide.Plugins
           {
             player.Message(lang.GetMessage("discord.connected", this, player.Id));
           }
-          else
-          {
-            ApiError(code, response);
-          }
+          else { ApiError(code, response); }
 
         }, this, RequestMethod.PUT, Headers(), 100f);
     }

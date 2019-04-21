@@ -9,7 +9,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "1.0.4")]
+  [Info("Pound Bot Clans", "MrPoundsign", "1.1.0")]
   [Description("Clans support for PoundBot")]
 
   class PoundBotClans : RustPlugin
@@ -35,7 +35,7 @@ namespace Oxide.Plugins
     void OnServerInitialized()
     {
       RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
-      RequestHeaders["X-PoundBotChatRelay-Version"] = Version.ToString();
+      RequestHeaders["X-PoundBotClans-Version"] = Version.ToString();
       ClansURI = $"{(string)PoundBot?.Call("ApiBase")}/clans";
       SendClans();
     }
@@ -58,11 +58,7 @@ namespace Oxide.Plugins
           body,
           (code, response) =>
           {
-            if (!ApiSuccess(code == 200))
-            {
-              ApiError(code, response);
-            }
-
+            if (!ApiSuccess(code == 200)) { ApiError(code, response); }
           },
           this, RequestMethod.PUT, RequestHeaders, 100f);
       }
@@ -82,11 +78,7 @@ namespace Oxide.Plugins
           body,
           (code, response) =>
           {
-            if (!ApiSuccess(code == 200))
-            {
-              ApiError(code, response);
-            }
-
+            if (!ApiSuccess(code == 200)) { ApiError(code, response); }
           }, this, RequestMethod.PUT, RequestHeaders, 100f
         );
       }

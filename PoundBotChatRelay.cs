@@ -10,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.0.10")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.0")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : RustPlugin
@@ -25,7 +25,7 @@ namespace Oxide.Plugins
 
     class ChatMessage
     {
-      public ulong SteamID { get; set; }
+      public string PlayerID { get; set; }
       public string ClanTag { get; set; }
       public string DisplayName { get; set; }
       public string Message { get; set; }
@@ -58,8 +58,10 @@ namespace Oxide.Plugins
 
     void OnServerInitialized()
     {
+      Puts($"{Server.ToString()}");
       RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
       RequestHeaders["X-PoundBotChatRelay-Version"] = Version.ToString();
+
       ChatURI = $"{(string)PoundBot?.Call("ApiBase")}/chat";
       if (!(bool)Config["relay.betterchat"])
       {
@@ -79,7 +81,7 @@ namespace Oxide.Plugins
     }
 
     void Unload() { KillChatRunners(); }
-    #endregion
+#endregion
 
     void KillChatRunners()
     {
@@ -177,7 +179,7 @@ namespace Oxide.Plugins
     private ChatMessage IPlayerMessage(IPlayer player, string message)
     {
       var cm = new ChatMessage { };
-      cm.SteamID = (ulong)Convert.ToUInt64(player.Id);
+      cm.PlayerID = player.Id;
       cm.DisplayName = player.Name;
       cm.Message = message;
 
