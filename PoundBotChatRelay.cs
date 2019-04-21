@@ -10,10 +10,10 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.0")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.1")]
   [Description("Chat relay for use with PoundBot")]
 
-  class PoundBotChatRelay : RustPlugin
+  class PoundBotChatRelay : CovalencePlugin
   {
     [PluginReference]
     private Plugin PoundBot;
@@ -58,7 +58,6 @@ namespace Oxide.Plugins
 
     void OnServerInitialized()
     {
-      Puts($"{Server.ToString()}");
       RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
       RequestHeaders["X-PoundBotChatRelay-Version"] = Version.ToString();
 
@@ -135,7 +134,13 @@ namespace Oxide.Plugins
                       consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
                     }
                     Puts(string.Format(lang.GetMessage("console.Msg", this), consoleName, message?.Message));
-                    PrintToChat(string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message));
+
+                    var chatMessage = string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message);
+
+                    foreach (IPlayer p in players.Connected)
+                    {
+                      p.Message(chatMessage);
+                    }
                   }
                   ApiSuccess(true);
                   break;
