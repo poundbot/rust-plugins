@@ -9,10 +9,10 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "1.1.0")]
+  [Info("Pound Bot Clans", "MrPoundsign", "1.1.1")]
   [Description("Clans support for PoundBot")]
 
-  class PoundBotClans : RustPlugin
+  class PoundBotClans : CovalencePlugin
   {
     [PluginReference]
     private Plugin PoundBot, Clans;
