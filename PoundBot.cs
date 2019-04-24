@@ -3,11 +3,12 @@ using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using System;
+using System.Linq;
 using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.1.0")]
+  [Info("Pound Bot", "MrPoundsign", "1.1.1")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
@@ -51,7 +52,7 @@ namespace Oxide.Plugins
     #region Configuration
     protected override void LoadDefaultConfig()
     {
-      Config["api_url"] = "http://poundbot.mrpoundsign.com/";
+      Config["api_url"] = "https://api.poundbot.com/";
       Config["api_key"] = "API KEY HERE";
     }
 
@@ -59,6 +60,7 @@ namespace Oxide.Plugins
     {
       lang.RegisterMessages(new Dictionary<string, string>
       {
+        ["command.poundbot_register"] = "pbreg",
         ["connector.reconnected"] = "Reconnected with PoundBot",
         ["connector.time_in_error"] = "Total time in error: {0}",
         ["connector.error"] = "Error communicating with PoundBot: {0}/{1}",
@@ -69,7 +71,7 @@ namespace Oxide.Plugins
       }, this);
     }
 
-    void Loaded()
+    void Init()
     {
       ApiBaseURI = $"{Config["api_url"]}api";
       RequestHeaders = new Dictionary<string, string>
@@ -81,6 +83,7 @@ namespace Oxide.Plugins
         ["X-PoundBot-Game"] = covalence.Game.ToLower()
       };
       Connected();
+      AddLocalizedCommand("command.poundbot_register", "CommandPoundBotRegister");
     }
     #endregion
 
@@ -178,9 +181,20 @@ namespace Oxide.Plugins
     }
     #endregion
 
+    #region Helpers
+    private void AddLocalizedCommand(string key, string command)
+    {
+      foreach (var language in lang.GetLanguages(this))
+      {
+        var messages = lang.GetMessages(language, this);
+        foreach (var message in messages.Where(m => m.Key.Equals(key)))
+          if (!string.IsNullOrEmpty(message.Value)) AddCovalenceCommand(message.Value, command);
+      }
+    }
+    #endregion
+
     #region Commands
-    [Command("pbreg")]
-    private void CmdPoundBotRegister(IPlayer player, string command, string[] args)
+    private void CommandPoundBotRegister(IPlayer player, string command, string[] args)
     {
       if (!ApiRequestOk())
       {
