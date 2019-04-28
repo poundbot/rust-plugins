@@ -10,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.2")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.3")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -22,6 +22,8 @@ namespace Oxide.Plugins
     private Dictionary<string, string> RequestHeaders;
     private string ChatURI;
     private bool RelayDiscordChat;
+    private bool RelayGiveNotices;
+    private bool RelayServerChat;
 
     class ChatMessage
     {
@@ -36,8 +38,11 @@ namespace Oxide.Plugins
     #region Configuration
     protected override void LoadDefaultConfig()
     {
+      LogWarning("Creating a new configuration file");
+      Config["version"] = "1.1.3";
       Config["relay.chat"] = true;
       Config["relay.serverchat"] = true;
+      Config["relay.givenotices"] = false;
       Config["relay.discordchat"] = true;
       Config["relay.betterchat"] = false;
     }
@@ -59,34 +64,54 @@ namespace Oxide.Plugins
 
     void OnServerInitialized()
     {
+      UpgradeConfig();
       RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
       RequestHeaders["X-PoundBotChatRelay-Version"] = Version.ToString();
 
       ChatURI = $"{(string)PoundBot?.Call("ApiBase")}/chat";
-      if (!(bool)Config["relay.betterchat"])
-      {
-        Unsubscribe("OnBetterChat");
-      }
-      if(!(bool)Config["relay.chat"])
+      if (!(bool)Config["relay.chat"])
       {
         Unsubscribe("OnUserChat");
+        Unsubscribe("OnBetterChat");
       }
-      if (!(bool)Config["relay.serverchat"])
+      else
+      {
+        if ((bool)Config["relay.betterchat"])
+        {
+          Unsubscribe("OnUserChat");
+        }
+      }
+
+      RelayServerChat = (bool)Config["relay.serverchat"];
+      RelayGiveNotices = (bool)Config["relay.givenotices"];
+      
+      if (!RelayServerChat && !RelayGiveNotices)
       {
         Unsubscribe("OnServerMessage");
       }
 
-      if ((bool)Config["relay.chat"] && (bool)Config["relay.betterchat"])
-      {
-        Puts(string.Format(lang.GetMessage("console.DualChatWarning", this)));
-      }
-
       RelayDiscordChat = (bool)Config["relay.discordchat"];
+      
       StartChatRunners();
     }
 
+    void UpgradeConfig()
+    {
+      if (Config["config.version"] == null || (string)Config["config.version"] != "1.1.3")
+      {
+        LogWarning("Upgrading config to 1.1.3");
+        if ((bool)Config["relay.betterchat"])
+        {
+          Config["relay.chat"] = true;
+        }
+        Config["config.version"] = "1.1.3";
+        Config["relay.givenotices"] = true;
+        SaveConfig();
+      }
+    }
+
     void Unload() { KillChatRunners(); }
-#endregion
+    #endregion
 
     void KillChatRunners()
     {
@@ -165,9 +190,13 @@ namespace Oxide.Plugins
       });
     }
 
-    void OnServerMessage(string message, string name, string color, ulong id)
+    void OnServerMessage(string message, string name)
     {
+      var isGaveMessage = (message.Contains("gave") && name == "SERVER");
       if (!ApiRequestOk()) return;
+      if (!RelayServerChat && !isGaveMessage) return;
+      if (!RelayGiveNotices && isGaveMessage) return;
+
       var cm = new ChatMessage { };
       cm.DisplayName = name;
       cm.Message = message;
