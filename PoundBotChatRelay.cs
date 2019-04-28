@@ -10,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.1")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.2")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -53,6 +53,7 @@ namespace Oxide.Plugins
           ["chat.Msg"] = "{{DSCD}} {0}: {1}",
           ["console.ClanTag"] = "[{0}] ",
           ["console.Msg"] = "{{DSCD}} {0}: {1}",
+          ["console.DualChatWarning"] = "You have both relay.chat and relay.betterchat enabled. You may get duplicate messages. Please disable one or the other."
         }, this);
     }
 
@@ -73,6 +74,11 @@ namespace Oxide.Plugins
       if (!(bool)Config["relay.serverchat"])
       {
         Unsubscribe("OnServerMessage");
+      }
+
+      if ((bool)Config["relay.chat"] && (bool)Config["relay.betterchat"])
+      {
+        Puts(string.Format(lang.GetMessage("console.DualChatWarning", this)));
       }
 
       RelayDiscordChat = (bool)Config["relay.discordchat"];
