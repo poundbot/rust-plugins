@@ -10,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.3")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.4")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -42,7 +42,7 @@ namespace Oxide.Plugins
       Config["version"] = "1.1.3";
       Config["relay.chat"] = true;
       Config["relay.serverchat"] = true;
-      Config["relay.givenotices"] = false;
+      Config["relay.givenotices"] = true;
       Config["relay.discordchat"] = true;
       Config["relay.betterchat"] = false;
     }
@@ -105,7 +105,7 @@ namespace Oxide.Plugins
           Config["relay.chat"] = true;
         }
         Config["config.version"] = "1.1.3";
-        Config["relay.givenotices"] = true;
+        Config["relay.givenotices"] = (bool)Config["relay.serverchat"];
         SaveConfig();
       }
     }
