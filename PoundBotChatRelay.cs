@@ -10,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.4")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.5")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -24,6 +24,8 @@ namespace Oxide.Plugins
     private bool RelayDiscordChat;
     private bool RelayGiveNotices;
     private bool RelayServerChat;
+    // Temporary work-around until I can figure out why Unsubscribe("OnBetterChat") is not working
+    private bool UseBetterChat;
 
     class ChatMessage
     {
@@ -79,16 +81,19 @@ namespace Oxide.Plugins
         if ((bool)Config["relay.betterchat"])
         {
           Unsubscribe("OnUserChat");
+          // Temporary work-around until I can figure out why Unsubscribe("OnBetterChat") is not working
+          UseBetterChat = true;
+        }
+        else
+        {
+          Unsubscribe("OnBetterChat");
         }
       }
 
       RelayServerChat = (bool)Config["relay.serverchat"];
       RelayGiveNotices = (bool)Config["relay.givenotices"];
       
-      if (!RelayServerChat && !RelayGiveNotices)
-      {
-        Unsubscribe("OnServerMessage");
-      }
+      if (!RelayServerChat && !RelayGiveNotices) Unsubscribe("OnServerMessage");
 
       RelayDiscordChat = (bool)Config["relay.discordchat"];
       
@@ -213,6 +218,10 @@ namespace Oxide.Plugins
 
     void OnBetterChat(Dictionary<string, object> data)
     {
+      // Temporary work-around until I can figure out why Unsubscribe("OnBetterChat") is not working
+      if (!UseBetterChat) return;
+
+      if (!ApiRequestOk()) return;
       SendToPoundBot(IPlayerMessage((IPlayer)data["Player"], (string)data["Text"]));
     }
 
