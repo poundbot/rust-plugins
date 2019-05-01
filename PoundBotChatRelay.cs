@@ -10,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.5")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.6")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -41,12 +41,12 @@ namespace Oxide.Plugins
     protected override void LoadDefaultConfig()
     {
       LogWarning("Creating a new configuration file");
-      Config["version"] = "1.1.3";
+      Config["config.version"] = "1.1.3";
       Config["relay.chat"] = true;
+      Config["relay.betterchat"] = false;
       Config["relay.serverchat"] = true;
       Config["relay.givenotices"] = true;
       Config["relay.discordchat"] = true;
-      Config["relay.betterchat"] = false;
     }
     #endregion
 
@@ -59,8 +59,7 @@ namespace Oxide.Plugins
           ["chat.ClanTag"] = "[{0}] ",
           ["chat.Msg"] = "{{DSCD}} {0}: {1}",
           ["console.ClanTag"] = "[{0}] ",
-          ["console.Msg"] = "{{DSCD}} {0}: {1}",
-          ["console.DualChatWarning"] = "You have both relay.chat and relay.betterchat enabled. You may get duplicate messages. Please disable one or the other."
+          ["console.Msg"] = "{{DSCD}} {0}: {1}"
         }, this);
     }
 
