@@ -4,13 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
-using Oxide.Core.Libraries;
 using Oxide.Core.Plugins;
-using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.1.0")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.2.0")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -18,8 +16,9 @@ namespace Oxide.Plugins
     [PluginReference]
     private Plugin PoundBot;
 
+    const string EntityDeathURI = "/entity_death";
+
     private Dictionary<string, string> RequestHeaders;
-    private string EntityDeathURI;
     private bool ShowOwnDamage;
 
     class EntityDeath
@@ -47,9 +46,9 @@ namespace Oxide.Plugins
 
     void OnServerInitialized()
     {
-      RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
-      RequestHeaders["X-PoundRaidAlerts-Version"] = Version.ToString();
-      EntityDeathURI = $"{(string)PoundBot?.Call("ApiBase")}/entity_death";
+      RequestHeaders = new Dictionary<string, string> {
+        ["X-PoundRaidAlerts-Version"] = Version.ToString()
+      };
       ShowOwnDamage = (bool)Config["show_own_damage"];
     }
 
@@ -71,11 +70,11 @@ namespace Oxide.Plugins
       if (initiator is BasePlayer)
       {
         if (entity.OwnerID == 0) return;
-        var player = (BasePlayer)initiator;
+        BasePlayer player = (BasePlayer)initiator;
 
         if (!ShowOwnDamage && entity.OwnerID == player.userID) return;
 
-        var priv = entity.GetBuildingPrivilege();
+        BuildingPrivlidge priv = entity.GetBuildingPrivilege();
         string[] owners;
 
         if (priv != null)
@@ -88,20 +87,24 @@ namespace Oxide.Plugins
         }
 
         string[] words = entity.ShortPrefabName.Split('/');
-        var name = words[words.Length - 1].Split('.')[0];
+        string name = words[words.Length - 1].Split('.')[0];
 
-        var di = new EntityDeath(name, GridPos(entity), owners);
-        var body = JsonConvert.SerializeObject(di);
+        EntityDeath di = new EntityDeath(name, GridPos(entity), owners);
 
-        if (ApiRequestOk())
-        {
-          webrequest.Enqueue(
-            EntityDeathURI, body,
-            (code, response) => { if (!ApiSuccess(code == 200)) { ApiError(code, response); } },
-            this, RequestMethod.PUT, RequestHeaders, 100f
-          );
-        }
+        Func<int, string, bool> callback = EntityDeathHandler;
+
+        PoundBot?.Call("API_RequestPut", new object[] {
+          EntityDeathURI,
+          JsonConvert.SerializeObject(di),
+          callback,
+          this, RequestHeaders, 100f
+        });
       }
+    }
+
+    private bool EntityDeathHandler(int code, string response)
+    {
+      return (code == 200);
     }
 
     private string GridPos(BaseEntity entity)
@@ -110,12 +113,12 @@ namespace Oxide.Plugins
       var gridCellSize = 150;
       var num2 = (int)(entity.transform.position.x + (size / 2)) / gridCellSize;
       var index = Math.Abs((int)(entity.transform.position.z - (size / 2)) / gridCellSize);
-      return $"{this.NumberToLetter(num2) + index.ToString()}";
+      return NumberToLetter(num2) + index.ToString();
     }
 
     public string NumberToLetter(int num)
     {
-      int num1 = Mathf.FloorToInt(num / 26);
+      int num1 = (int)Math.Floor((double)(num / 26));
       int num2 = num % 26;
       string empty = string.Empty;
       if (num1 > 0)
@@ -124,21 +127,6 @@ namespace Oxide.Plugins
           empty += Convert.ToChar(65 + index).ToString();
       }
       return empty + Convert.ToChar(65 + num2).ToString();
-    }
-
-    private bool ApiRequestOk()
-    {
-      return (bool)PoundBot?.Call("ApiRequestOk");
-    }
-
-    private bool ApiSuccess(bool success)
-    {
-      return (bool)PoundBot?.Call("ApiSuccess", success);
-    }
-
-    private void ApiError(int code, string response)
-    {
-      PoundBot?.Call("ApiError", code, response);
     }
   }
 }

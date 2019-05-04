@@ -10,7 +10,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.1.6")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.2.0")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin

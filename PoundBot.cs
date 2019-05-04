@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.1.1")]
+  [Info("Pound Bot", "MrPoundsign", "1.2.0")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
@@ -52,10 +52,38 @@ namespace Oxide.Plugins
     #region Configuration
     protected override void LoadDefaultConfig()
     {
-      Config["api_url"] = "https://api.poundbot.com/";
-      Config["api_key"] = "API KEY HERE";
+      Config["api.url"] = "https://api.poundbot.com/";
+      Config["api.key"] = "API KEY HERE";
+      Config["config.version"] = "1.1.2";
     }
 
+    void UpgradeConfig()
+    {
+      if (Config["config.version"] == null || (string)Config["config.version"] != "1.1.2")
+      {
+        LogWarning("Upgrading config to 1.1.2");
+
+        // Update the API endpoint
+        var api_url = (string)Config["api_url"];
+        if (api_url == "http://poundbot.mrpoundsign.com" || api_url == "http://api.poundbot.com")
+        {
+          Config["api.url"] = "https://api.poundbot.com";
+        }
+        else
+        {
+          Config["api.url"] = (string)Config["api_url"];
+        }
+        Config["api.key"] = (string)Config["api_key"];
+        Config.Remove("api_url");
+        Config.Remove("api_key");
+        Config["config.version"] = "1.1.2";
+        SaveConfig();
+      }
+    }
+
+    #endregion
+
+    #region Language
     protected override void LoadDefaultMessages()
     {
       lang.RegisterMessages(new Dictionary<string, string>
@@ -63,7 +91,8 @@ namespace Oxide.Plugins
         ["command.poundbot_register"] = "pbreg",
         ["connector.reconnected"] = "Reconnected with PoundBot",
         ["connector.time_in_error"] = "Total time in error: {0}",
-        ["connector.error"] = "Error communicating with PoundBot: {0}/{1}",
+        ["connector.error"] = "Error communicating with PoundBot: {1}:{2}",
+        ["connector.error_with_rid"] = "Error communicating with PoundBot: [{0}] {1}:{2}",
         ["connector.user_error"] = "Cannot connect to PoundBot right now. Please alert the admins.",
         ["discord.pin"] = "Enter the following PIN to the bot in discord: {0}.",
         ["discord.connected"] = "You are connected to discord.",
@@ -71,13 +100,17 @@ namespace Oxide.Plugins
       }, this);
     }
 
+    #endregion
+
+    #region Oxide API
     void Init()
     {
-      ApiBaseURI = $"{Config["api_url"]}api";
+      UpgradeConfig();
+      ApiBaseURI = $"{Config["api.url"]}api";
       RequestHeaders = new Dictionary<string, string>
       {
         ["Content-type"] = "application/json",
-        ["Authorization"] = $"Token {Config["api_key"]}",
+        ["Authorization"] = $"Token {Config["api.key"]}",
         ["X-PoundBotConnector-Version"] = Version.ToString(),
         ["User-Agent"] = $"PoundBotConnector/{Version.ToString()}",
         ["X-PoundBot-Game"] = covalence.Game.ToLower()
@@ -113,7 +146,7 @@ namespace Oxide.Plugins
       return (!ApiInError || ApiRetry);
     }
 
-    private void ApiError(int code, string response)
+    private void ApiError(int code, string response, string requestID = null)
     {
       string error;
       if (ApiInError)
@@ -124,11 +157,7 @@ namespace Oxide.Plugins
           ApiRetry = false;
         }
 
-        if (ApiRetryAttempts % ApiRetryNotify != 0)
-        {
-          return;
-        }
-
+        if (ApiRetryAttempts % ApiRetryNotify != 0) return;
       }
       else
       {
@@ -154,7 +183,12 @@ namespace Oxide.Plugins
           error = response;
         }
       }
-      Puts(string.Format(lang.GetMessage("connector.error", this), code, error));
+      if (code == 0) {
+        Puts(string.Format(lang.GetMessage("connector.error", this), code, error));
+        return;
+      }
+      Puts(string.Format(lang.GetMessage("connector.error_with_rid", this), requestID, code, error));
+
     }
 
     private bool ApiSuccess(bool success)
@@ -170,6 +204,56 @@ namespace Oxide.Plugins
         Connected();
       }
       return success;
+    }
+
+    // Returns true if request was sent, false otherwise.
+    private bool API_Request(string uri, string body, Func<int, string, bool> callback, Plugin owner, RequestMethod method = RequestMethod.GET, Dictionary<string, string> headers = null, float timeout = 0)
+    {
+      if (!ApiRequestOk()) return false;
+
+      Dictionary<string, string> rHeaders = new Dictionary<string, string>(Headers());
+      rHeaders["X-Request-ID"] = Guid.NewGuid().ToString();
+
+      if (headers != null)
+      {
+        foreach (var pairs in headers)
+        {
+          rHeaders[pairs.Key] = pairs.Value;
+        }
+      }
+
+      webrequest.Enqueue($"{ApiBaseURI}{uri}", body,
+        (code, response) => {
+          bool success = callback(code, response);
+          
+          ApiSuccess(success);
+          if (!success)
+          {
+            ApiError(code, response, rHeaders["X-Request-ID"]);
+          }
+        },
+        owner, method, rHeaders, timeout);
+      return true;
+    }
+
+    private bool API_RequestGet(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
+    {
+      return API_Request(uri, body, callback, owner, RequestMethod.GET, headers, timeout);
+    }
+
+    private bool API_RequestPost(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
+    {
+      return API_Request(uri, body, callback, owner, RequestMethod.POST, headers, timeout);
+    }
+
+    private bool API_RequestPut(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
+    {
+      return API_Request(uri, body, callback, owner, RequestMethod.PUT, headers, timeout);
+    }
+
+    private bool API_RequestDelete(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
+    {
+      return API_Request(uri, body, callback, owner, RequestMethod.DELETE, headers, timeout);
     }
 
     private void Connected()
@@ -196,11 +280,6 @@ namespace Oxide.Plugins
     #region Commands
     private void CommandPoundBotRegister(IPlayer player, string command, string[] args)
     {
-      if (!ApiRequestOk())
-      {
-        player.Message(lang.GetMessage("connector.user_error", this, player.Id));
-        return;
-      }
       if (args.Length != 1)
       {
         player.Message(lang.GetMessage("usage", this, player.Id));
@@ -209,24 +288,21 @@ namespace Oxide.Plugins
 
       var da = new DiscordAuth(player.Name, args[0], player.Id);
 
-      var body = JsonConvert.SerializeObject(da);
-
-      webrequest.Enqueue(
-        $"{ApiBase()}/discord_auth",
-        body,
+      API_RequestPut("/discord_auth", JsonConvert.SerializeObject(da),
         (code, response) =>
         {
-          if (ApiSuccess(code == 200))
+          if (code == 200)
           {
             player.Message(string.Format(lang.GetMessage("discord.pin", this, player.Id), da.Pin.ToString("D4")));
+            return true;
           }
           else if (code == 405) // Method not allowed means we're already connected
           {
             player.Message(lang.GetMessage("discord.connected", this, player.Id));
+            return true;
           }
-          else { ApiError(code, response); }
-
-        }, this, RequestMethod.PUT, Headers(), 100f);
+          return false;
+        }, this, null, 100f);
     }
   }
   #endregion
