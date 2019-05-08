@@ -17,6 +17,7 @@ namespace Oxide.Plugins
     protected int ApiRetrySeconds = 1;
     protected int ApiRetryNotify = 30;
 
+    protected string RegisteredUsersGroup;
     protected bool ApiInError;
     protected bool ApiRetry;
     protected uint ApiRetryAttempts;
@@ -55,6 +56,7 @@ namespace Oxide.Plugins
       Config["api.url"] = "https://api.poundbot.com/";
       Config["api.key"] = "API KEY HERE";
       Config["config.version"] = "1.1.2";
+      Config["players.registered.group"] = "poundbot.registered";
     }
 
     void UpgradeConfig()
@@ -65,9 +67,9 @@ namespace Oxide.Plugins
 
         // Update the API endpoint
         var api_url = (string)Config["api_url"];
-        if (api_url == "http://poundbot.mrpoundsign.com" || api_url == "http://api.poundbot.com")
+        if (api_url == "http://poundbot.mrpoundsign.com/" || api_url == "http://api.poundbot.com/")
         {
-          Config["api.url"] = "https://api.poundbot.com";
+          Config["api.url"] = "https://api.poundbot.com/";
         }
         else
         {
@@ -76,6 +78,7 @@ namespace Oxide.Plugins
         Config["api.key"] = (string)Config["api_key"];
         Config.Remove("api_url");
         Config.Remove("api_key");
+        Config["players.registered.group"] = "poundbot.registered";
         Config["config.version"] = "1.1.2";
         SaveConfig();
       }
@@ -91,7 +94,7 @@ namespace Oxide.Plugins
         ["command.poundbot_register"] = "pbreg",
         ["connector.reconnected"] = "Reconnected with PoundBot",
         ["connector.time_in_error"] = "Total time in error: {0}",
-        ["connector.error"] = "Error communicating with PoundBot: {1}:{2}",
+        ["connector.error"] = "Error communicating with PoundBot: {0}:{1}",
         ["connector.error_with_rid"] = "Error communicating with PoundBot: [{0}] {1}:{2}",
         ["connector.user_error"] = "Cannot connect to PoundBot right now. Please alert the admins.",
         ["discord.pin"] = "Enter the following PIN to the bot in discord: {0}.",
@@ -115,8 +118,61 @@ namespace Oxide.Plugins
         ["User-Agent"] = $"PoundBotConnector/{Version.ToString()}",
         ["X-PoundBot-Game"] = covalence.Game.ToLower()
       };
-      Connected();
+
+      RegisteredUsersGroup = (string)Config["players.registered.group"];
+      permission.RegisterPermission(RegisteredUsersGroup, this);
+      if (!permission.GroupExists(RegisteredUsersGroup))
+      {
+        permission.CreateGroup(RegisteredUsersGroup, "PoundBot Registered Users", 0);
+      }
+
       AddLocalizedCommand("command.poundbot_register", "CommandPoundBotRegister");
+
+      Connected();
+
+      timer.Every(5f, () =>
+      {
+        API_RequestGet("/players/registered", null,
+        (code, response) =>
+        {
+          if (code == 200)
+          {
+            string[] groupPlayerIDs = permission.GetUsersInGroup(RegisteredUsersGroup);
+            string[] playerIDs = JsonConvert.DeserializeObject<string[]>(response);
+
+            for (int i = 0; i < groupPlayerIDs.Length; i++)
+            {
+              groupPlayerIDs[i] = groupPlayerIDs[i].Substring(0, groupPlayerIDs[i].IndexOf(' '));
+            }
+
+            // hot group diff action
+            string[] playersToRemove = groupPlayerIDs.Except(playerIDs).ToArray();
+            string[] playersToAdd = playerIDs.Except(groupPlayerIDs).ToArray();
+
+            if (playersToAdd.Length + playersToRemove.Length == 0)
+            {
+              return true;
+            }
+
+            foreach (string id in playersToRemove)
+            {
+              Puts($"Removing user {id} from {RegisteredUsersGroup}");
+              permission.RemoveUserGroup(id, RegisteredUsersGroup);
+            }
+
+            foreach (string id in playersToAdd)
+            {
+              Puts($"Adding user {id} to {RegisteredUsersGroup}");
+              permission.AddUserGroup(id, RegisteredUsersGroup);
+            }
+            return true;
+          }
+
+          Puts("Unuccessful registered players get");
+          Puts(response);
+          return false;
+        }, this, null, 100f);
+      });
     }
     #endregion
 
@@ -183,7 +239,8 @@ namespace Oxide.Plugins
           error = response;
         }
       }
-      if (code == 0) {
+      if (code == 0)
+      {
         Puts(string.Format(lang.GetMessage("connector.error", this), code, error));
         return;
       }
@@ -223,9 +280,10 @@ namespace Oxide.Plugins
       }
 
       webrequest.Enqueue($"{ApiBaseURI}{uri}", body,
-        (code, response) => {
+        (code, response) =>
+        {
           bool success = callback(code, response);
-          
+
           ApiSuccess(success);
           if (!success)
           {

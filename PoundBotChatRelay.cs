@@ -226,12 +226,12 @@ namespace Oxide.Plugins
 
     private ChatMessage IPlayerMessage(IPlayer player, string message)
     {
-      var cm = new ChatMessage { };
-      cm.PlayerID = player.Id;
-      cm.DisplayName = player.Name;
-      cm.Message = message;
-
-      return cm;
+      return new ChatMessage
+      {
+        PlayerID = player.Id,
+        DisplayName = player.Name,
+        Message = message
+      };
     }
 
     void SendToPoundBot(ChatMessage cm)
