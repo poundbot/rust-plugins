@@ -272,11 +272,9 @@ namespace Oxide.Plugins
     {
       if (!ApiRequestOk())
       {
-        Puts($"API Down: {uri}");
+        Puts($"API Down: {ApiBaseURI}{uri}");
         return false;
       }
-
-      Puts($"API OK: {uri}");
 
       Dictionary<string, string> rHeaders = new Dictionary<string, string>(Headers());
       rHeaders["X-Request-ID"] = Guid.NewGuid().ToString();
