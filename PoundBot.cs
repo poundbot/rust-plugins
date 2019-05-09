@@ -24,6 +24,7 @@ namespace Oxide.Plugins
     protected DateTime ApiErrorTime;
     protected DateTime LastApiAttempt;
     private Dictionary<string, string> RequestHeaders;
+    protected bool RegisteredUsersInFlight;
 
     class ApiErrorResponse
     {
@@ -132,9 +133,12 @@ namespace Oxide.Plugins
 
       timer.Every(5f, () =>
       {
+        if (RegisteredUsersInFlight) return;
+        RegisteredUsersInFlight = true;
         API_RequestGet("/players/registered", null,
         (code, response) =>
         {
+          RegisteredUsersInFlight = false;
           if (code == 200)
           {
             string[] groupPlayerIDs = permission.GetUsersInGroup(RegisteredUsersGroup);
@@ -266,7 +270,13 @@ namespace Oxide.Plugins
     // Returns true if request was sent, false otherwise.
     private bool API_Request(string uri, string body, Func<int, string, bool> callback, Plugin owner, RequestMethod method = RequestMethod.GET, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      if (!ApiRequestOk()) return false;
+      if (!ApiRequestOk())
+      {
+        Puts($"API Down: {uri}");
+        return false;
+      }
+
+      Puts($"API OK: {uri}");
 
       Dictionary<string, string> rHeaders = new Dictionary<string, string>(Headers());
       rHeaders["X-Request-ID"] = Guid.NewGuid().ToString();
@@ -279,18 +289,17 @@ namespace Oxide.Plugins
         }
       }
 
-      webrequest.Enqueue($"{ApiBaseURI}{uri}", body,
+      timer.In(1f, () => {
+        webrequest.Enqueue($"{ApiBaseURI}{uri}", body,
         (code, response) =>
         {
-          bool success = callback(code, response);
-
-          ApiSuccess(success);
-          if (!success)
+          if (!ApiSuccess(callback(code, response)))
           {
             ApiError(code, response, rHeaders["X-Request-ID"]);
           }
         },
         owner, method, rHeaders, timeout);
+      });
       return true;
     }
 
