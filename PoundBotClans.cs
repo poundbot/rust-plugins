@@ -73,7 +73,7 @@ namespace Oxide.Plugins
       PoundBot?.Call("API_RequestPut", new object[] { $"{ClansURI}/{tag}", JsonConvert.SerializeObject(clan), callback, this, RequestHeaders, 100f });
     }
 
-    void OnClanUpdate(string tag) { OnClanCreate(tag); }
+    void OnClanUpdate(string tag) => OnClanCreate(tag);
 
     void OnClanDestroy(string tag)
     {
@@ -86,6 +86,6 @@ namespace Oxide.Plugins
     #endregion
 
     // Re-send all clans if PoundBot reconnects
-    void OnPoundBotConnected() { SendClans(); }
+    void OnPoundBotConnected() => SendClans();
   }
 }

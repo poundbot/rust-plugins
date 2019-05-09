@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
-using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 
@@ -18,13 +17,13 @@ namespace Oxide.Plugins
     [PluginReference]
     private Plugin PoundBot;
 
+    const string ChatURI = "/chat";
+
     protected int ApiChatRunnersCount;
     private Dictionary<string, string> RequestHeaders;
-    private string ChatURI;
     private bool RelayDiscordChat;
     private bool RelayGiveNotices;
     private bool RelayServerChat;
-    // Temporary work-around until I can figure out why Unsubscribe("OnBetterChat") is not working
     private bool UseBetterChat;
 
     class ChatMessage
@@ -66,10 +65,11 @@ namespace Oxide.Plugins
     void OnServerInitialized()
     {
       UpgradeConfig();
-      RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
-      RequestHeaders["X-PoundBotChatRelay-Version"] = Version.ToString();
+      RequestHeaders = new Dictionary<string, string>
+      {
+        ["X-PoundBotChatRelay-Version"] = Version.ToString()
+      };
 
-      ChatURI = $"{(string)PoundBot?.Call("ApiBase")}/chat";
       if (!(bool)Config["relay.chat"])
       {
         Unsubscribe("OnUserChat");
@@ -80,7 +80,6 @@ namespace Oxide.Plugins
         if ((bool)Config["relay.betterchat"])
         {
           Unsubscribe("OnUserChat");
-          // Temporary work-around until I can figure out why Unsubscribe("OnBetterChat") is not working
           UseBetterChat = true;
         }
         else
@@ -91,11 +90,11 @@ namespace Oxide.Plugins
 
       RelayServerChat = (bool)Config["relay.serverchat"];
       RelayGiveNotices = (bool)Config["relay.givenotices"];
-      
+
       if (!RelayServerChat && !RelayGiveNotices) Unsubscribe("OnServerMessage");
 
       RelayDiscordChat = (bool)Config["relay.discordchat"];
-      
+
       StartChatRunners();
     }
 
@@ -114,9 +113,10 @@ namespace Oxide.Plugins
       }
     }
 
-    void Unload() { KillChatRunners(); }
+    void Unload() => KillChatRunners();
     #endregion
 
+    #region Chat Runners
     void KillChatRunners()
     {
       if (!RelayDiscordChat) return;
@@ -142,62 +142,62 @@ namespace Oxide.Plugins
         chat_runners.Add(StartChatRunner());
       }
     }
+    #endregion
+
+    #region PoundBot Requests
+    private bool ChatReceiveHandler(int code, string response)
+    {
+      ApiChatRunnersCount--;
+      switch (code)
+      {
+        case 200:
+          ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
+          if (message != null)
+          {
+            string chatName = message?.DisplayName;
+            string consoleName = message?.DisplayName;
+
+            if ((chatName != null) && (message.ClanTag != string.Empty))
+            {
+              chatName = $"{string.Format(lang.GetMessage("chat.ClanTag", this), message.ClanTag)}{chatName}";
+              consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
+            }
+
+            Puts(string.Format(lang.GetMessage("console.Msg", this), consoleName, message?.Message));
+
+            string chatMessage = string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message);
+            foreach (IPlayer p in players.Connected)
+            {
+              p.Message(chatMessage);
+            }
+          }
+          return true;
+        case 204: // Status No Content
+          return true;
+      }
+
+      return false;
+    }
+
+    private bool ChatSendHandler(int code, string response) => code == 200;
 
     private Timer StartChatRunner()
     {
+      Func<int, string, bool> callback = ChatReceiveHandler;
+
       return timer.Every(1f, () =>
-      {
-        if (ApiChatRunnersCount < 2 && ApiRequestOk())
         {
-          ApiChatRunnersCount++;
-          webrequest.Enqueue(
-            ChatURI, null,
-            (code, response) =>
-            {
-              ApiChatRunnersCount--;
-              switch (code)
-              {
-                case 200:
-                  ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
-                  if (message != null)
-                  {
-                    var chatName = message?.DisplayName;
-                    var consoleName = message?.DisplayName;
-                    if ((chatName != null) && (message.ClanTag != String.Empty))
-                    {
-                      chatName = $"{string.Format(lang.GetMessage("chat.ClanTag", this), message.ClanTag)}{chatName}";
-                      consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
-                    }
-                    Puts(string.Format(lang.GetMessage("console.Msg", this), consoleName, message?.Message));
-
-                    var chatMessage = string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message);
-
-                    foreach (IPlayer p in players.Connected)
-                    {
-                      p.Message(chatMessage);
-                    }
-                  }
-                  ApiSuccess(true);
-                  break;
-                case 204:
-                  ApiSuccess(true);
-                  break;
-                default:
-                  ApiError(code, response);
-                  break;
-              }
-
-            },
-            this, RequestMethod.GET, RequestHeaders, 120000f
-          );
+          if (ApiChatRunnersCount < 2 &&
+              (bool)PoundBot.Call("API_RequestGet", new object[] { ChatURI, null, callback, this, RequestHeaders, 120000f })
+          ) ApiChatRunnersCount++;
         }
-      });
+      );
     }
+    #endregion
 
     void OnServerMessage(string message, string name)
     {
       var isGaveMessage = (message.Contains("gave") && name == "SERVER");
-      if (!ApiRequestOk()) return;
       if (!RelayServerChat && !isGaveMessage) return;
       if (!RelayGiveNotices && isGaveMessage) return;
 
@@ -208,19 +208,12 @@ namespace Oxide.Plugins
       SendToPoundBot(cm);
     }
 
-    void OnUserChat(IPlayer player, string message)
-    {
-      if (!ApiRequestOk()) return;
-
-      SendToPoundBot(IPlayerMessage(player, message));
-    }
+    void OnUserChat(IPlayer player, string message) => SendToPoundBot(IPlayerMessage(player, message));
 
     void OnBetterChat(Dictionary<string, object> data)
     {
-      // Temporary work-around until I can figure out why Unsubscribe("OnBetterChat") is not working
       if (!UseBetterChat) return;
 
-      if (!ApiRequestOk()) return;
       SendToPoundBot(IPlayerMessage((IPlayer)data["Player"], (string)data["Text"]));
     }
 
@@ -238,26 +231,12 @@ namespace Oxide.Plugins
     {
       var body = JsonConvert.SerializeObject(cm);
 
-      webrequest.Enqueue(
-        ChatURI, body,
-        (code, response) => { if (!ApiSuccess(code == 200)) ApiError(code, response); },
-        this, RequestMethod.POST, RequestHeaders, 100f
+      Func<int, string, bool> callback = ChatSendHandler;
+
+      PoundBot.Call(
+        "API_RequestPost",
+        new object[] { ChatURI, body, callback, this, RequestHeaders, 100f }
       );
-    }
-
-    private bool ApiRequestOk()
-    {
-      return (bool)PoundBot?.Call("ApiRequestOk");
-    }
-
-    private bool ApiSuccess(bool success)
-    {
-      return (bool)PoundBot?.Call("ApiSuccess", success);
-    }
-
-    private void ApiError(int code, string response)
-    {
-      PoundBot?.Call("ApiError", code, response);
     }
   }
 }
