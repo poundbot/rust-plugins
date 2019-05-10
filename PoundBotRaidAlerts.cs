@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.2.0")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.2.1")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -93,12 +93,11 @@ namespace Oxide.Plugins
 
         Func<int, string, bool> callback = EntityDeathHandler;
 
-        PoundBot?.Call("API_RequestPut", new object[] {
-          EntityDeathURI,
-          JsonConvert.SerializeObject(di),
-          callback,
-          this, RequestHeaders, 100f
-        });
+        PoundBot.Call(
+          "API_RequestPut", new object[] {
+            EntityDeathURI, JsonConvert.SerializeObject(di), callback, this, RequestHeaders
+          }
+        );
       }
     }
 

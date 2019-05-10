@@ -9,7 +9,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.2.0")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.2.1")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -188,7 +188,7 @@ namespace Oxide.Plugins
       return timer.Every(1f, () =>
         {
           if (ApiChatRunnersCount < 2 &&
-              (bool)PoundBot.Call("API_RequestGet", new object[] { ChatURI, null, callback, this, RequestHeaders, 120000f })
+              (bool)PoundBot.Call("API_RequestGet", new object[] { ChatURI, null, callback, this, RequestHeaders })
           ) ApiChatRunnersCount++;
         }
       );
@@ -235,7 +235,7 @@ namespace Oxide.Plugins
 
       PoundBot.Call(
         "API_RequestPost",
-        new object[] { ChatURI, body, callback, this, RequestHeaders, 100f }
+        new object[] { ChatURI, body, callback, this, RequestHeaders }
       );
     }
   }

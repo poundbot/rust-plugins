@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.2.0")]
+  [Info("Pound Bot", "MrPoundsign", "1.2.1")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
@@ -303,22 +303,22 @@ namespace Oxide.Plugins
 
     private bool API_RequestGet(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.GET, headers, timeout);
+      return API_Request(uri, body, callback, owner, RequestMethod.GET, headers, 0);
     }
 
     private bool API_RequestPost(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.POST, headers, timeout);
+      return API_Request(uri, body, callback, owner, RequestMethod.POST, headers, 0);
     }
-
+    
     private bool API_RequestPut(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.PUT, headers, timeout);
+      return API_Request(uri, body, callback, owner, RequestMethod.PUT, headers, 0);
     }
 
     private bool API_RequestDelete(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.DELETE, headers, timeout);
+      return API_Request(uri, body, callback, owner, RequestMethod.DELETE, headers, 0);
     }
 
     private void Connected()
