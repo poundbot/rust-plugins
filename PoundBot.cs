@@ -268,7 +268,7 @@ namespace Oxide.Plugins
     }
 
     // Returns true if request was sent, false otherwise.
-    private bool API_Request(string uri, string body, Func<int, string, bool> callback, Plugin owner, RequestMethod method = RequestMethod.GET, Dictionary<string, string> headers = null, float timeout = 0)
+    private bool API_Request(string uri, string body, Func<int, string, bool> callback, Plugin owner, RequestMethod method = RequestMethod.GET, Dictionary<string, string> headers = null)
     {
       if (!ApiRequestOk())
       {
@@ -296,29 +296,29 @@ namespace Oxide.Plugins
             ApiError(code, response, rHeaders["X-Request-ID"]);
           }
         },
-        owner, method, rHeaders, timeout);
+        owner, method, rHeaders, 12000f);
       });
       return true;
     }
 
     private bool API_RequestGet(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.GET, headers, 0);
+      return API_Request(uri, body, callback, owner, RequestMethod.GET, headers);
     }
 
     private bool API_RequestPost(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.POST, headers, 0);
+      return API_Request(uri, body, callback, owner, RequestMethod.POST, headers);
     }
     
     private bool API_RequestPut(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.PUT, headers, 0);
+      return API_Request(uri, body, callback, owner, RequestMethod.PUT, headers);
     }
 
     private bool API_RequestDelete(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.DELETE, headers, 0);
+      return API_Request(uri, body, callback, owner, RequestMethod.DELETE, headers);
     }
 
     private void Connected()
