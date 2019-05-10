@@ -9,7 +9,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.2.1")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.2.2")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -47,6 +47,21 @@ namespace Oxide.Plugins
       Config["relay.givenotices"] = true;
       Config["relay.discordchat"] = true;
     }
+
+    void UpgradeConfig()
+    {
+      if (Config["config.version"] == null || (string)Config["config.version"] != "1.1.3")
+      {
+        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "1.1.3"));
+        if ((bool)Config["relay.betterchat"])
+        {
+          Config["relay.chat"] = true;
+        }
+        Config["config.version"] = "1.1.3";
+        Config["relay.givenotices"] = (bool)Config["relay.serverchat"];
+        SaveConfig();
+      }
+    }
     #endregion
 
     #region Oxide Hooks
@@ -58,7 +73,8 @@ namespace Oxide.Plugins
           ["chat.ClanTag"] = "[{0}] ",
           ["chat.Msg"] = "{{DSCD}} {0}: {1}",
           ["console.ClanTag"] = "[{0}] ",
-          ["console.Msg"] = "{{DSCD}} {0}: {1}"
+          ["console.Msg"] = "{{DSCD}} {0}: {1}",
+          ["config.upgrading"] = "Upgrading config to v{0}"
         }, this);
     }
 
@@ -96,21 +112,6 @@ namespace Oxide.Plugins
       RelayDiscordChat = (bool)Config["relay.discordchat"];
 
       StartChatRunners();
-    }
-
-    void UpgradeConfig()
-    {
-      if (Config["config.version"] == null || (string)Config["config.version"] != "1.1.3")
-      {
-        LogWarning("Upgrading config to 1.1.3");
-        if ((bool)Config["relay.betterchat"])
-        {
-          Config["relay.chat"] = true;
-        }
-        Config["config.version"] = "1.1.3";
-        Config["relay.givenotices"] = (bool)Config["relay.serverchat"];
-        SaveConfig();
-      }
     }
 
     void Unload() => KillChatRunners();

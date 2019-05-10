@@ -9,7 +9,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "1.2.1")]
+  [Info("Pound Bot Clans", "MrPoundsign", "1.2.2")]
   [Description("Clans support for PoundBot")]
 
   class PoundBotClans : CovalencePlugin
@@ -35,15 +35,11 @@ namespace Oxide.Plugins
 
     void OnServerInitialized()
     {
-      RequestHeaders = (Dictionary<string, string>)PoundBot?.Call("Headers");
-      RequestHeaders["X-PoundBotClans-Version"] = Version.ToString();
+      RequestHeaders = new Dictionary<string, string> { ["X-PoundBotClans-Version"] = Version.ToString() };
       SendClans();
     }
 
-    private bool AcceptedHandler(int code, string response)
-    {
-      return (code == 200);
-    }
+    private bool AcceptedHandler(int code, string response) => (code == 200);
 
     void SendClans()
     {
@@ -58,7 +54,7 @@ namespace Oxide.Plugins
 
       Func<int, string, bool> callback = AcceptedHandler;
 
-      PoundBot.Call("API_RequestPut", new object[] { ClansURI, JsonConvert.SerializeObject(clans), callback, this, RequestHeaders});
+      PoundBot.Call("API_RequestPut", new object[] { ClansURI, JsonConvert.SerializeObject(clans), callback, this, RequestHeaders });
     }
 
     #region Clans Hooks
@@ -70,7 +66,7 @@ namespace Oxide.Plugins
 
       Func<int, string, bool> callback = AcceptedHandler;
 
-      PoundBot.Call("API_RequestPut", new object[] { $"{ClansURI}/{tag}", JsonConvert.SerializeObject(clan), callback, this, RequestHeaders});
+      PoundBot.Call("API_RequestPut", new object[] { $"{ClansURI}/{tag}", JsonConvert.SerializeObject(clan), callback, this, RequestHeaders });
     }
 
     void OnClanUpdate(string tag) => OnClanCreate(tag);

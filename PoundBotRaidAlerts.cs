@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.2.1")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.2.2")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -20,6 +20,8 @@ namespace Oxide.Plugins
 
     private Dictionary<string, string> RequestHeaders;
     private bool ShowOwnDamage;
+    private bool PermittedOnly;
+    private string PermittedGroup;
 
     class EntityDeath
     {
@@ -37,20 +39,52 @@ namespace Oxide.Plugins
       }
     }
 
-    #region Configuration
-    protected override void LoadDefaultConfig()
+    //"Group {PermittedGroup} does not exist. Check permitted_only.group in config/PoundBotRaidAlerts.json or set permitted_only.enabled to false"
+    #region Language
+    protected override void LoadDefaultMessages()
     {
-      Config["show_own_damage"] = false;
+      lang.RegisterMessages(new Dictionary<string, string>
+      {
+        ["error.permitted_group_missing"] = "Group {0} does not exist. Check permitted_only.group in config/PoundBotRaidAlerts.json or set permitted_only.enabled to false",
+        ["config.upgrading"] = "Upgrading config to v{0}"
+      }, this);
     }
     #endregion
 
     void OnServerInitialized()
     {
-      RequestHeaders = new Dictionary<string, string> {
+      UpgradeConfig();
+      RequestHeaders = new Dictionary<string, string>
+      {
         ["X-PoundRaidAlerts-Version"] = Version.ToString()
       };
-      ShowOwnDamage = (bool)Config["show_own_damage"];
+      ShowOwnDamage = (bool)Config["debug.show_own_damage"];
+      PermittedOnly = (bool)Config["permitted_only.enabled"];
+      PermittedGroup = (string)Config["permitted_only.group"];
     }
+
+    #region Configuration
+    protected override void LoadDefaultConfig()
+    {
+      Config["debug.show_own_damage"] = false;
+      Config["permitted_only.enabled"] = false;
+      Config["permitted_only.group"] = "vip";
+    }
+
+    void UpgradeConfig()
+    {
+      if (Config["config.version"] == null || (string)Config["config.version"] != "1.2.2")
+      {
+        Puts(string.Format(lang.GetMessage("config.upgrading", this), "1.2.2"));
+        Config["debug.show_own_damage"] = (bool)Config["show_own_damage"];
+        Config.Remove("show_own_damage");
+        Config["permitted_only.enabled"] = false;
+        Config["permitted_only.group"] = "vip";
+        Config["config.version"] = "1.2.2";
+        SaveConfig();
+      }
+    }
+    #endregion
 
     void OnEntityDeath(BaseEntity victim, HitInfo info)
     {
@@ -58,6 +92,7 @@ namespace Oxide.Plugins
         !(victim is StorageContainer) &&
         !(victim is BaseVehicle)
       ) return;
+
       SendEntityDeath(victim, info?.Initiator);
     }
 
@@ -86,6 +121,36 @@ namespace Oxide.Plugins
           owners = new string[] { entity.OwnerID.ToString() };
         }
 
+        // Filter Owners to those who are registered with PoundBot
+        string[] registeredPlayerIDs = permission.GetUsersInGroup((string)PoundBot.Call("API_RegisteredUsersGroup"));
+        for (int i = 0; i < registeredPlayerIDs.Length; i++)
+        {
+          registeredPlayerIDs[i] = registeredPlayerIDs[i].Substring(0, registeredPlayerIDs[i].IndexOf(' '));
+        }
+
+        owners = owners.Intersect(registeredPlayerIDs).ToArray();
+        if (owners.Length == 0) return;
+
+        if (PermittedOnly)
+        {
+          if (!permission.GroupExists(PermittedGroup))
+          {
+            Puts(string.Format(lang.GetMessage("error.permitted_group_missing", this), PermittedGroup));
+            return;
+          }
+          // Filter Owners to those in the permitted group
+
+          string[] groupPlayerIDs = permission.GetUsersInGroup(PermittedGroup);
+          for (int i = 0; i < groupPlayerIDs.Length; i++)
+          {
+            groupPlayerIDs[i] = groupPlayerIDs[i].Substring(0, groupPlayerIDs[i].IndexOf(' '));
+          }
+
+          owners = owners.Intersect(groupPlayerIDs).ToArray();
+        }
+
+        if (owners.Length == 0) return;
+
         string[] words = entity.ShortPrefabName.Split('/');
         string name = words[words.Length - 1].Split('.')[0];
 
@@ -101,10 +166,7 @@ namespace Oxide.Plugins
       }
     }
 
-    private bool EntityDeathHandler(int code, string response)
-    {
-      return (code == 200);
-    }
+    private bool EntityDeathHandler(int code, string response) => (code == 200);
 
     private string GridPos(BaseEntity entity)
     {

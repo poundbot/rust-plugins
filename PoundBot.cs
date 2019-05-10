@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.2.1")]
+  [Info("Pound Bot", "MrPoundsign", "1.2.2")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
@@ -64,10 +64,10 @@ namespace Oxide.Plugins
     {
       if (Config["config.version"] == null || (string)Config["config.version"] != "1.1.2")
       {
-        LogWarning("Upgrading config to 1.1.2");
+        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "1.1.2"));
 
         // Update the API endpoint
-        var api_url = (string)Config["api_url"];
+        string api_url = (string)Config["api_url"];
         if (api_url == "http://poundbot.mrpoundsign.com/" || api_url == "http://api.poundbot.com/")
         {
           Config["api.url"] = "https://api.poundbot.com/";
@@ -84,7 +84,6 @@ namespace Oxide.Plugins
         SaveConfig();
       }
     }
-
     #endregion
 
     #region Language
@@ -92,6 +91,7 @@ namespace Oxide.Plugins
     {
       lang.RegisterMessages(new Dictionary<string, string>
       {
+        ["config.upgrading"] = "Upgrading config to v{0}",
         ["command.poundbot_register"] = "pbreg",
         ["connector.reconnected"] = "Reconnected with PoundBot",
         ["connector.time_in_error"] = "Total time in error: {0}",
@@ -175,22 +175,18 @@ namespace Oxide.Plugins
           Puts("Unuccessful registered players get");
           Puts(response);
           return false;
-        }, this, null, 100f);
+        }, this);
       });
     }
     #endregion
 
     #region API
 
-    private Dictionary<string, string> Headers()
-    {
-      return RequestHeaders;
-    }
+    private Dictionary<string, string> Headers() => RequestHeaders;
 
-    private string ApiBase()
-    {
-      return ApiBaseURI;
-    }
+    private string API_RegisteredUsersGroup() => RegisteredUsersGroup;
+
+    private string ApiBase() => ApiBaseURI;
 
     private bool ApiRequestOk()
     {
@@ -287,17 +283,15 @@ namespace Oxide.Plugins
         }
       }
 
-      timer.In(1f, () => {
-        webrequest.Enqueue($"{ApiBaseURI}{uri}", body,
-        (code, response) =>
+      webrequest.Enqueue($"{ApiBaseURI}{uri}", body,
+      (code, response) =>
+      {
+        if (!ApiSuccess(callback(code, response)))
         {
-          if (!ApiSuccess(callback(code, response)))
-          {
-            ApiError(code, response, rHeaders["X-Request-ID"]);
-          }
-        },
-        owner, method, rHeaders, 12000f);
-      });
+          ApiError(code, response, rHeaders["X-Request-ID"]);
+        }
+      },
+      owner, method, rHeaders, 12000f);
       return true;
     }
 
@@ -310,7 +304,7 @@ namespace Oxide.Plugins
     {
       return API_Request(uri, body, callback, owner, RequestMethod.POST, headers);
     }
-    
+
     private bool API_RequestPut(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
       return API_Request(uri, body, callback, owner, RequestMethod.PUT, headers);
@@ -367,7 +361,7 @@ namespace Oxide.Plugins
             return true;
           }
           return false;
-        }, this, null, 100f);
+        }, this);
     }
   }
   #endregion
