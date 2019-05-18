@@ -14,6 +14,7 @@ namespace Oxide.Plugins
   class PoundBot : CovalencePlugin
   {
     private string ApiBaseURI;
+    private string ApiMessageBaseURI;
     protected int ApiRetrySeconds = 1;
     protected int ApiRetryNotify = 30;
 
@@ -49,6 +50,12 @@ namespace Oxide.Plugins
         Pin = rnd.Next(1, 9999);
         CreatedAt = DateTime.UtcNow;
       }
+    }
+
+    class ServerMessage
+    {
+      public string Message { get; set; }
+      public string Type { get; set; }
     }
 
     #region Configuration
@@ -111,6 +118,7 @@ namespace Oxide.Plugins
     {
       UpgradeConfig();
       ApiBaseURI = $"{Config["api.url"]}api";
+      ApiMessageBaseURI = $"/messages";
       RequestHeaders = new Dictionary<string, string>
       {
         ["Content-type"] = "application/json",
@@ -182,7 +190,7 @@ namespace Oxide.Plugins
 
     #region API
 
-    private Dictionary<string, string> Headers() => RequestHeaders;
+    // private Dictionary<string, string> Headers() => RequestHeaders;
 
     private string API_RegisteredUsersGroup() => RegisteredUsersGroup;
 
@@ -266,13 +274,9 @@ namespace Oxide.Plugins
     // Returns true if request was sent, false otherwise.
     private bool API_Request(string uri, string body, Func<int, string, bool> callback, Plugin owner, RequestMethod method = RequestMethod.GET, Dictionary<string, string> headers = null)
     {
-      if (!ApiRequestOk())
-      {
-        Puts($"API Down: {ApiBaseURI}{uri}");
-        return false;
-      }
+      if (!ApiRequestOk()) return false;
 
-      Dictionary<string, string> rHeaders = new Dictionary<string, string>(Headers());
+      Dictionary<string, string> rHeaders = new Dictionary<string, string>(RequestHeaders);
       rHeaders["X-Request-ID"] = Guid.NewGuid().ToString();
 
       if (headers != null)
@@ -313,6 +317,30 @@ namespace Oxide.Plugins
     private bool API_RequestDelete(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
     {
       return API_Request(uri, body, callback, owner, RequestMethod.DELETE, headers);
+    }
+
+    private bool API_SendChannelMessage(Plugin owner, string channel_name, string message, Func<int, string, bool> callback = null, Dictionary<string, string> headers = null, string type = "plain")
+    {
+      Puts($"SendChannelMessage received from ${owner.Title}");
+
+      ServerMessage sm = new ServerMessage
+      {
+        Message = message
+      };
+
+      if (channel_name[0] == '#')
+      {
+        channel_name = channel_name.Substring(1);
+      }
+
+      if (callback == null) {
+        callback = (int code, string response) => (code == 200);
+      }
+
+      string body = JsonConvert.SerializeObject(sm);
+      API_RequestPost($"{ApiMessageBaseURI}/{channel_name}", body, callback, owner, headers);
+      
+      return true;
     }
 
     private void Connected()

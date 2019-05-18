@@ -1,4 +1,4 @@
-// Requires: PoundBot
+﻿// Requires: PoundBot
 
 using System;
 using System.Collections.Generic;
@@ -9,7 +9,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.2.2")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.2.3")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -25,6 +25,8 @@ namespace Oxide.Plugins
     private bool RelayGiveNotices;
     private bool RelayServerChat;
     private bool UseBetterChat;
+    private string RelayChatChannel;
+    private string RelayServerChannel;
 
     class ChatMessage
     {
@@ -34,33 +36,74 @@ namespace Oxide.Plugins
       public string Message { get; set; }
     }
 
-    private List<Timer> chat_runners = new List<Timer>();
+    class ChatRunner
+    {
+      public string ID { get; }
+      public DateTime LastRun { get; set; }
+      public bool Running { get; set; }
+      public bool LastStartOK { get; set; }
+      public Timer Timer { get; set; }
+
+      public ChatRunner()
+      {
+        ID = Guid.NewGuid().ToString();
+        LastRun = DateTime.UtcNow;
+      }
+    }
+
+    private List<ChatRunner> ChatRunners = new List<ChatRunner>();
 
     #region Configuration
     protected override void LoadDefaultConfig()
     {
       LogWarning("Creating a new configuration file");
-      Config["config.version"] = "1.1.3";
+      Config["config.version"] = 3;
       Config["relay.chat"] = true;
       Config["relay.betterchat"] = false;
       Config["relay.serverchat"] = true;
       Config["relay.givenotices"] = true;
       Config["relay.discordchat"] = true;
+      Config["chat.channel"] = "";
+      Config["chat.server_channel"] = "";
     }
-
+    
     void UpgradeConfig()
     {
-      if (Config["config.version"] == null || (string)Config["config.version"] != "1.1.3")
+      string configVersion = "config.version";
+      bool dirty = false;
+      if (Config[configVersion] == null)
       {
-        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "1.1.3"));
+        Config[configVersion] = 1;
+      }
+      else
+      {
+        try
+        {
+          var foo = (string)Config[configVersion];
+          Config["config.version"] = 2;
+        }
+        catch (InvalidCastException) { } // testing if it can be converted to a string or not. No need to change it because it's not a string.
+      }
+
+      if ((int)Config[configVersion] < 2) {
+        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "2"));
         if ((bool)Config["relay.betterchat"])
         {
           Config["relay.chat"] = true;
         }
-        Config["config.version"] = "1.1.3";
         Config["relay.givenotices"] = (bool)Config["relay.serverchat"];
-        SaveConfig();
+        dirty = true;
       }
+
+      if ((int)Config[configVersion] <3)
+      {
+        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "3"));
+        Config[configVersion] = 3;
+        Config["chat.channel"] = "";
+        Config["chat.server_channel"] = "";
+        dirty = true;
+      }
+      if (dirty) SaveConfig();
     }
     #endregion
 
@@ -111,6 +154,9 @@ namespace Oxide.Plugins
 
       RelayDiscordChat = (bool)Config["relay.discordchat"];
 
+      RelayChatChannel = (string)Config["chat.channel"];
+      RelayServerChannel = (string) Config["chat.server_channel"];
+
       StartChatRunners();
     }
 
@@ -122,77 +168,113 @@ namespace Oxide.Plugins
     {
       if (!RelayDiscordChat) return;
       Puts("Killing chat runners");
-      foreach (var runner in chat_runners)
+      foreach (var runner in ChatRunners)
       {
-        runner.Destroy();
+        runner.Timer.Destroy();
       }
-      chat_runners.Clear();
+      ChatRunners.Clear();
     }
 
     // Chat runners connect to PoundBot and wait for new chat messages
     // from Discord to send to global chat
     void StartChatRunners()
     {
-      if (!RelayDiscordChat || chat_runners.Count != 0) return;
+      if (!RelayDiscordChat) return;
 
       Puts("Starting chat runners");
       var runners_to_start = Enumerable.Range(1, 2);
       foreach (int i in runners_to_start)
       {
         Puts($"Started chat runner {i}");
-        chat_runners.Add(StartChatRunner());
+        ChatRunners.Add(StartChatRunner());
       }
+    }
+
+    void RestartChatRunner(string id)
+    {
+      int index = ChatRunners.FindIndex(x => x.ID == id);
+      if (index < 0)
+      {
+        Puts($"Could not find ChatRunner with ID {id}");
+        return;
+      }
+      ChatRunners[index].Timer.Destroy();
+      ChatRunners.RemoveAt(index);
+      ChatRunners.Add(StartChatRunner());
     }
     #endregion
 
     #region PoundBot Requests
-    private bool ChatReceiveHandler(int code, string response)
+    private ChatRunner StartChatRunner()
     {
-      ApiChatRunnersCount--;
-      switch (code)
+      ChatRunner cr = new ChatRunner();
+      Func<int, string, bool> callback = (int code, string response) =>
       {
-        case 200:
-          ChatMessage message = JsonConvert.DeserializeObject<ChatMessage>(response);
-          if (message != null)
-          {
-            string chatName = message?.DisplayName;
-            string consoleName = message?.DisplayName;
-
-            if ((chatName != null) && (message.ClanTag != string.Empty))
-            {
-              chatName = $"{string.Format(lang.GetMessage("chat.ClanTag", this), message.ClanTag)}{chatName}";
-              consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
-            }
-
-            Puts(string.Format(lang.GetMessage("console.Msg", this), consoleName, message?.Message));
-
-            string chatMessage = string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message);
-            foreach (IPlayer p in players.Connected)
-            {
-              p.Message(chatMessage);
-            }
-          }
-          return true;
-        case 204: // Status No Content
-          return true;
-      }
-
-      return false;
-    }
-
-    private bool ChatSendHandler(int code, string response) => code == 200;
-
-    private Timer StartChatRunner()
-    {
-      Func<int, string, bool> callback = ChatReceiveHandler;
-
-      return timer.Every(1f, () =>
+        cr.Running = false;
+        switch (code)
         {
-          if (ApiChatRunnersCount < 2 &&
-              (bool)PoundBot.Call("API_RequestGet", new object[] { ChatURI, null, callback, this, RequestHeaders })
-          ) ApiChatRunnersCount++;
+          case 200:
+            ChatMessage message;
+            try
+            {
+              message = JsonConvert.DeserializeObject<ChatMessage>(response);
+            }
+            catch (JsonReaderException)
+            {
+              Puts($"Could not decode JSON message from body: {response}");
+              return true;
+            }
+            if (message != null)
+            {
+              string chatName = message?.DisplayName;
+              string consoleName = message?.DisplayName;
+
+              if ((chatName != null) && (message.ClanTag != string.Empty))
+              {
+                chatName = $"{string.Format(lang.GetMessage("chat.ClanTag", this), message.ClanTag)}{chatName}";
+                consoleName = $"{string.Format(lang.GetMessage("console.ClanTag", this), message.ClanTag)}{consoleName}";
+              }
+
+              Puts(string.Format(lang.GetMessage("console.Msg", this), consoleName, message?.Message));
+
+              string chatMessage = string.Format(lang.GetMessage("chat.Msg", this), chatName, message?.Message);
+              foreach (IPlayer p in players.Connected)
+              {
+                p.Message(chatMessage);
+              }
+            }
+            return true;
+          case 204: // Status No Content
+            return true;
         }
-      );
+
+        return false;
+      };
+
+      cr.Timer = timer.Every(1f, () =>
+      {
+        if (!cr.Running)
+        {
+          if ((bool)PoundBot.Call("API_RequestGet", new object[] { ChatURI, null, callback, this, RequestHeaders }))
+          {
+            cr.LastRun = DateTime.UtcNow;
+            cr.Running = true;
+            cr.LastStartOK = true;
+          }
+          else
+          {
+            // The API is down or could not start
+            cr.LastStartOK = false;
+          }
+        }
+        else if (cr.LastStartOK && cr.LastRun.AddSeconds(60) < DateTime.UtcNow)
+        {
+          cr.Running = false;
+          RestartChatRunner(cr.ID);
+        }
+      });
+
+      return cr;
     }
     #endregion
 
@@ -202,41 +284,29 @@ namespace Oxide.Plugins
       if (!RelayServerChat && !isGaveMessage) return;
       if (!RelayGiveNotices && isGaveMessage) return;
 
-      var cm = new ChatMessage { };
-      cm.DisplayName = name;
-      cm.Message = message;
+      // var cm = new ChatMessage { };
+      // cm.DisplayName = name;
+      // cm.Message = message;
+      // cm.ChannelName = RelayServerChannel;
 
-      SendToPoundBot(cm);
+      SendToPoundBot(name, RelayServerChannel, message);
     }
 
-    void OnUserChat(IPlayer player, string message) => SendToPoundBot(IPlayerMessage(player, message));
+    void OnUserChat(IPlayer player, string message) => SendToPoundBot(player.Name, RelayChatChannel, message);
 
     void OnBetterChat(Dictionary<string, object> data)
     {
       if (!UseBetterChat) return;
 
-      SendToPoundBot(IPlayerMessage((IPlayer)data["Player"], (string)data["Text"]));
+      //SendToPoundBot((IPlayer)data["Player"], (string)data["Text"], RelayChatChannel);
     }
 
-    private ChatMessage IPlayerMessage(IPlayer player, string message)
+    void SendToPoundBot(string player, string channel_name, string message)
     {
-      return new ChatMessage
-      {
-        PlayerID = player.Id,
-        DisplayName = player.Name,
-        Message = message
-      };
-    }
-
-    void SendToPoundBot(ChatMessage cm)
-    {
-      var body = JsonConvert.SerializeObject(cm);
-
-      Func<int, string, bool> callback = ChatSendHandler;
-
+      message = $":radioactive: [{DateTime.Now.ToString("HH:mm")}] {player} {message}";
       PoundBot.Call(
-        "API_RequestPost",
-        new object[] { ChatURI, body, callback, this, RequestHeaders }
+        "API_SendChannelMessage",
+        new object[] { this, channel_name, message, null, RequestHeaders }
       );
     }
   }
