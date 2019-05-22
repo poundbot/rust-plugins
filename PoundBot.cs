@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.2.2")]
+  [Info("Pound Bot", "MrPoundsign", "1.3.0")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
@@ -52,10 +52,22 @@ namespace Oxide.Plugins
       }
     }
 
-    class ServerMessage
+    public class GameMessageEmbedStyle
     {
-      public string Message { get; set; }
-      public string Type { get; set; }
+      public string Color { get; set; }
+    }
+
+    class GameMessagePart
+    {
+      public string Content { get; set; }
+      public bool Escape { get; set; }
+    }
+
+    class GameMessage
+    {
+      public GameMessagePart[] MessageParts { get; set; }
+      public int Type { get; set; } // 0 = plain, 1 = embedded
+      public GameMessageEmbedStyle EmbedStyle { get; set; }
     }
 
     #region Configuration
@@ -63,13 +75,31 @@ namespace Oxide.Plugins
     {
       Config["api.url"] = "https://api.poundbot.com/";
       Config["api.key"] = "API KEY HERE";
-      Config["config.version"] = "1.1.2";
+      Config["config.version"] = 2;
       Config["players.registered.group"] = "poundbot.registered";
     }
 
     void UpgradeConfig()
     {
-      if (Config["config.version"] == null || (string)Config["config.version"] != "1.1.2")
+      string configVersion = "config.version";
+      bool dirty = false;
+
+      if (Config[configVersion] == null)
+      {
+        Config[configVersion] = 1;
+      }
+      else
+      {
+        try
+        {
+          var foo = (string)Config[configVersion];
+          Config[configVersion] = 2;
+          dirty = true;
+        }
+        catch (InvalidCastException) { } // testing if it can be converted to a string or not. No need to change it because it's not a string.
+      }
+
+      if ((int)Config[configVersion] < 2)
       {
         LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "1.1.2"));
 
@@ -87,7 +117,12 @@ namespace Oxide.Plugins
         Config.Remove("api_url");
         Config.Remove("api_key");
         Config["players.registered.group"] = "poundbot.registered";
-        Config["config.version"] = "1.1.2";
+        Config[configVersion] = 2;
+        dirty = true;
+      }
+
+      if (dirty)
+      {
         SaveConfig();
       }
     }
@@ -319,18 +354,38 @@ namespace Oxide.Plugins
       return API_Request(uri, body, callback, owner, RequestMethod.DELETE, headers);
     }
 
-    private bool API_SendChannelMessage(Plugin owner, string channel_name, string message, Func<int, string, bool> callback = null, Dictionary<string, string> headers = null, string type = "plain")
+    private bool API_SendChannelMessage(Plugin owner, string channel, KeyValuePair<string, bool>[] message_parts, string embed_color = null, Func<int, string, bool> callback = null, Dictionary<string, string> headers = null, string type = "plain")
     {
-      Puts($"SendChannelMessage received from ${owner.Title}");
+      List<GameMessagePart> parts = new List<GameMessagePart>();
 
-      ServerMessage sm = new ServerMessage
+      foreach(KeyValuePair<string, bool> part in message_parts)
       {
-        Message = message
+        parts.Add(
+          new GameMessagePart
+          {
+            Content = part.Key,
+            Escape = part.Value
+          }
+          );
+      }
+
+      GameMessage sm = new GameMessage
+      {
+        MessageParts = parts.ToArray()
       };
 
-      if (channel_name[0] == '#')
+      if (embed_color != null)
       {
-        channel_name = channel_name.Substring(1);
+        sm.Type = 1;
+        sm.EmbedStyle = new GameMessageEmbedStyle
+        {
+          Color = embed_color
+        };
+      }
+
+      if (channel[0] == '#')
+      {
+        channel = channel.Substring(1);
       }
 
       if (callback == null) {
@@ -338,7 +393,7 @@ namespace Oxide.Plugins
       }
 
       string body = JsonConvert.SerializeObject(sm);
-      API_RequestPost($"{ApiMessageBaseURI}/{channel_name}", body, callback, owner, headers);
+      API_RequestPost($"{ApiMessageBaseURI}/{channel}", body, callback, owner, headers);
       
       return true;
     }

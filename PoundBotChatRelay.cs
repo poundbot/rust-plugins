@@ -9,13 +9,13 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.2.3")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.3.0")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
   {
     [PluginReference]
-    private Plugin PoundBot;
+    private Plugin PoundBot, Clans;
 
     const string ChatURI = "/chat";
 
@@ -26,11 +26,12 @@ namespace Oxide.Plugins
     private bool RelayServerChat;
     private bool UseBetterChat;
     private string RelayChatChannel;
+    private string RelayChatColor;
+    private string RelayServerChatColor;
     private string RelayServerChannel;
 
     class ChatMessage
     {
-      public string PlayerID { get; set; }
       public string ClanTag { get; set; }
       public string DisplayName { get; set; }
       public string Message { get; set; }
@@ -65,8 +66,12 @@ namespace Oxide.Plugins
       Config["relay.discordchat"] = true;
       Config["chat.channel"] = "";
       Config["chat.server_channel"] = "";
+      Config["chat.styled"] = true;
+      Config["chat.styled_color"] = "darkorange";
+      Config["chat.server_styled"] = true;
+      Config["chat.server_styled_color"] = "darkred";
     }
-    
+
     void UpgradeConfig()
     {
       string configVersion = "config.version";
@@ -80,12 +85,13 @@ namespace Oxide.Plugins
         try
         {
           var foo = (string)Config[configVersion];
-          Config["config.version"] = 2;
+          Config[configVersion] = 2;
         }
         catch (InvalidCastException) { } // testing if it can be converted to a string or not. No need to change it because it's not a string.
       }
 
-      if ((int)Config[configVersion] < 2) {
+      if ((int)Config[configVersion] < 2)
+      {
         LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "2"));
         if ((bool)Config["relay.betterchat"])
         {
@@ -95,12 +101,16 @@ namespace Oxide.Plugins
         dirty = true;
       }
 
-      if ((int)Config[configVersion] <3)
+      if ((int)Config[configVersion] < 3)
       {
         LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "3"));
         Config[configVersion] = 3;
         Config["chat.channel"] = "";
         Config["chat.server_channel"] = "";
+        Config["chat.styled"] = true;
+        Config["chat.styled_color"] = "darkorange";
+        Config["chat.server_styled"] = true;
+        Config["chat.server_styled_color"] = "darkred";
         dirty = true;
       }
       if (dirty) SaveConfig();
@@ -115,6 +125,8 @@ namespace Oxide.Plugins
         {
           ["chat.ClanTag"] = "[{0}] ",
           ["chat.Msg"] = "{{DSCD}} {0}: {1}",
+          ["chat.Prefix"] = ":radioactive:",
+          ["chat.DateFormat"] = "[HH:mm]",
           ["console.ClanTag"] = "[{0}] ",
           ["console.Msg"] = "{{DSCD}} {0}: {1}",
           ["config.upgrading"] = "Upgrading config to v{0}"
@@ -155,7 +167,16 @@ namespace Oxide.Plugins
       RelayDiscordChat = (bool)Config["relay.discordchat"];
 
       RelayChatChannel = (string)Config["chat.channel"];
-      RelayServerChannel = (string) Config["chat.server_channel"];
+      RelayServerChannel = (string)Config["chat.server_channel"];
+
+      if ((bool)Config["chat.styled"])
+      {
+        RelayChatColor = (string)Config["chat.styled_color"];
+      }
+      if ((bool)Config["chat.server_styled"])
+      {
+        RelayServerChatColor = (string)Config["chat.server_styled_color"];
+      }
 
       StartChatRunners();
     }
@@ -284,29 +305,57 @@ namespace Oxide.Plugins
       if (!RelayServerChat && !isGaveMessage) return;
       if (!RelayGiveNotices && isGaveMessage) return;
 
-      // var cm = new ChatMessage { };
-      // cm.DisplayName = name;
-      // cm.Message = message;
-      // cm.ChannelName = RelayServerChannel;
-
-      SendToPoundBot(name, RelayServerChannel, message);
+      SendToPoundBot(name, message, RelayServerChannel, RelayServerChatColor);
     }
 
-    void OnUserChat(IPlayer player, string message) => SendToPoundBot(player.Name, RelayChatChannel, message);
+    void OnUserChat(IPlayer player, string message) => SendToPoundBot(player, message, RelayChatChannel, RelayChatColor);
 
     void OnBetterChat(Dictionary<string, object> data)
     {
       if (!UseBetterChat) return;
 
-      //SendToPoundBot((IPlayer)data["Player"], (string)data["Text"], RelayChatChannel);
+      string color = RelayChatColor;
+
+      if (RelayChatColor != null)
+      {
+        Dictionary<string, object> m = (Dictionary<string, object>)data["Message"];
+
+        color = (string)m["Color"];
+      }
+
+      IPlayer player = (IPlayer)data["Player"];
+
+      SendToPoundBot(player, (string)data["Text"], RelayChatChannel, color);
     }
 
-    void SendToPoundBot(string player, string channel_name, string message)
+    void SendToPoundBot(IPlayer player, string message, string channel, string embed_color = null)
     {
-      message = $":radioactive: [{DateTime.Now.ToString("HH:mm")}] {player} {message}";
+      string playerName = player.Name;
+      var clanTag = (string)Clans?.Call("GetClanOf", player);
+      if (!string.IsNullOrEmpty(clanTag))
+      {
+        playerName = $"[{clanTag}]{playerName}";
+      }
+
+      SendToPoundBot(playerName, message, channel, embed_color);
+    }
+
+    void SendToPoundBot(string player, string message, string channel, string embed_color = null)
+    {
+      if (channel == "")
+      {
+        Puts("Channel not defined. Please set your channel names in config/PoundBotChatRelay.json.");
+        return;
+      }
+
+      KeyValuePair<string, bool>[] message_parts = new KeyValuePair<string, bool>[4];
+      message_parts[0] = new KeyValuePair<string, bool>($"{lang.GetMessage("chat.Prefix", this)}{DateTime.Now.ToString(lang.GetMessage("chat.DateFormat", this))} **", false);
+      message_parts[1] = new KeyValuePair<string, bool>(player, true);
+      message_parts[2] = new KeyValuePair<string, bool>("**: ", false);
+      message_parts[3] = new KeyValuePair<string, bool>(message, true);
       PoundBot.Call(
         "API_SendChannelMessage",
-        new object[] { this, channel_name, message, null, RequestHeaders }
+        new object[] { this, channel, message_parts, embed_color, null, RequestHeaders }
       );
     }
   }
