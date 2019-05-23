@@ -92,7 +92,7 @@ namespace Oxide.Plugins
 
       if ((int)Config[configVersion] < 2)
       {
-        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "2"));
+        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), 2));
         if ((bool)Config["relay.betterchat"])
         {
           Config["relay.chat"] = true;
@@ -103,7 +103,7 @@ namespace Oxide.Plugins
 
       if ((int)Config[configVersion] < 3)
       {
-        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), "3"));
+        LogWarning(string.Format(lang.GetMessage("config.upgrading", this), 3));
         Config[configVersion] = 3;
         Config["chat.channel"] = "";
         Config["chat.server_channel"] = "";

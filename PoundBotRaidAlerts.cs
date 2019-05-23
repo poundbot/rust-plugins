@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.2.2")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.2.3")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -66,6 +66,7 @@ namespace Oxide.Plugins
     #region Configuration
     protected override void LoadDefaultConfig()
     {
+      Config["config.version"] = 2;
       Config["debug.show_own_damage"] = false;
       Config["permitted_only.enabled"] = false;
       Config["permitted_only.group"] = "vip";
@@ -73,14 +74,44 @@ namespace Oxide.Plugins
 
     void UpgradeConfig()
     {
-      if (Config["config.version"] == null || (string)Config["config.version"] != "1.2.2")
+      string configVersion = "config.version";
+      bool dirty = false;
+
+      if (Config[configVersion] == null)
       {
-        Puts(string.Format(lang.GetMessage("config.upgrading", this), "1.2.2"));
-        Config["debug.show_own_damage"] = (bool)Config["show_own_damage"];
+        Config[configVersion] = 1;
+      }
+      else
+      {
+        try
+        {
+          var foo = (string)Config[configVersion];
+          Config[configVersion] = 2;
+          dirty = true;
+        }
+        catch (InvalidCastException) { } // testing if it can be converted to a string or not. No need to change it because it's not a string.
+      }
+
+      if ((int)Config["config.version"] < 2)
+      {
+        Puts(string.Format(lang.GetMessage("config.upgrading", this), 2));
+        if (Config["show_own_damage"] != null)
+        {
+          Config["debug.show_own_damage"] = (bool)Config["show_own_damage"];
+        }
+        else
+        {
+          Config["debug.show_own_damage"] = false;
+        }
         Config.Remove("show_own_damage");
         Config["permitted_only.enabled"] = false;
         Config["permitted_only.group"] = "vip";
-        Config["config.version"] = "1.2.2";
+        Config["config.version"] = 2;
+        dirty = true;
+      }
+
+      if (dirty)
+      {
         SaveConfig();
       }
     }
