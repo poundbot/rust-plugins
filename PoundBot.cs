@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Oxide.Core;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
@@ -8,7 +9,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.3.0")]
+  [Info("Pound Bot", "MrPoundsign", "1.4.0")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
@@ -26,10 +27,53 @@ namespace Oxide.Plugins
     protected DateTime LastApiAttempt;
     private Dictionary<string, string> RequestHeaders;
     protected bool RegisteredUsersInFlight;
+    private ChannelList KnownChannelList;
 
     class ApiErrorResponse
     {
       public string Error;
+    }
+
+    class Channel
+    {
+      public string ID;
+      public string Name;
+      public bool CanSend;
+      public bool CanStyle;
+
+      public bool IsAvailable()
+      {
+        return CanSend || CanStyle;
+      }
+    }
+
+    class ChannelList
+    {
+      public Channel[] Channels;
+
+      public bool CanSendTo(string channel)
+      {
+        foreach (Channel chan in Channels)
+        {
+          if (chan.Name == channel || chan.ID == channel)
+          {
+            return chan.CanSend;
+          }
+        }
+        return false;
+      }
+
+      public bool CanStyleTo(string channel)
+      {
+        foreach (Channel chan in Channels)
+        {
+          if (chan.Name == channel || chan.ID == channel)
+          {
+            return chan.CanStyle;
+          }
+        }
+        return false;
+      }
     }
 
     class DiscordAuth
@@ -41,13 +85,13 @@ namespace Oxide.Plugins
       public int Pin;
       public DateTime CreatedAt;
 
-      public DiscordAuth(string displayname, string discordName, string playerid)
+      public DiscordAuth(string displayName, string discordName, string playerid)
       {
-        Random rnd = new Random();
-        DisplayName = displayname;
+        System.Random rnd = new System.Random();
+        Pin = rnd.Next(1, 9999);
+        DisplayName = displayName;
         DiscordName = discordName;
         PlayerID = playerid;
-        Pin = rnd.Next(1, 9999);
         CreatedAt = DateTime.UtcNow;
       }
     }
@@ -142,6 +186,9 @@ namespace Oxide.Plugins
         ["connector.user_error"] = "Cannot connect to PoundBot right now. Please alert the admins.",
         ["discord.pin"] = "Enter the following PIN to the bot in discord: {0}.",
         ["discord.connected"] = "You are connected to discord.",
+        ["discord.channels_updated"] = "Channel cache updated.",
+        ["discord.channel_cannot_send"] = "Cannot send to channel {0}. Please check that the bot can send to this channel. Run pb.updatechannels after making Discord changes to update the cache.",
+        ["discord.channel_cannot_style"] = "Cannot send to channel {0}. Please check that the bot can embed links to this channel. Run pb.updatechannels after making Discord changes to update the cache.",
         ["usage"] = "Usage: /pbreg \"<discord name>\"\n Example: /discord \"Fancy Guy#8080\"",
       }, this);
     }
@@ -358,7 +405,7 @@ namespace Oxide.Plugins
     {
       List<GameMessagePart> parts = new List<GameMessagePart>();
 
-      foreach(KeyValuePair<string, bool> part in message_parts)
+      foreach (KeyValuePair<string, bool> part in message_parts)
       {
         parts.Add(
           new GameMessagePart
@@ -366,7 +413,7 @@ namespace Oxide.Plugins
             Content = part.Key,
             Escape = part.Value
           }
-          );
+        );
       }
 
       GameMessage sm = new GameMessage
@@ -376,11 +423,24 @@ namespace Oxide.Plugins
 
       if (embed_color != null)
       {
+        if (!KnownChannelList.CanStyleTo(channel))
+        {
+          Puts(string.Format(lang.GetMessage("discord.channel_cannot_style", this), channel));
+          return false;
+        }
         sm.Type = 1;
         sm.EmbedStyle = new GameMessageEmbedStyle
         {
           Color = embed_color
         };
+      }
+      else
+      {
+        if (!KnownChannelList.CanSendTo(channel))
+        {
+          Puts(string.Format(lang.GetMessage("discord.channel_cannot_send", this), channel));
+          return false;
+        }
       }
 
       if (channel[0] == '#')
@@ -388,24 +448,50 @@ namespace Oxide.Plugins
         channel = channel.Substring(1);
       }
 
-      if (callback == null) {
+      if (callback == null)
+      {
         callback = (int code, string response) => (code == 200);
       }
 
       string body = JsonConvert.SerializeObject(sm);
       API_RequestPost($"{ApiMessageBaseURI}/{channel}", body, callback, owner, headers);
-      
+
       return true;
     }
 
     private void Connected()
     {
-      foreach (Plugin plugin in plugins.GetAll())
-      {
-        plugin.CallHook("OnPoundBotConnected");
-      }
+      UpdateChannels();
+      Interface.Call("OnPoundBotConnected");
     }
     #endregion
+
+    private void UpdateChannels()
+    {
+      API_RequestGet(ApiMessageBaseURI, null,
+          (code, response) =>
+          {
+            if (code == 200)
+            {
+              KnownChannelList = JsonConvert.DeserializeObject<ChannelList>(response);
+              Puts(lang.GetMessage("discord.channels_updated", this));
+              return true;
+            }
+
+            return false;
+          }, this);
+    }
+
+    public void PrintChannels(bool all = false)
+    {
+      foreach (Channel c in KnownChannelList.Channels)
+      {
+        if (all || c.IsAvailable())
+        {
+          Puts($"ID: {c.ID}, Name: {c.Name}, CanSend: {c.CanSend}, CanStyle: {c.CanStyle}");
+        }
+      }
+    }
 
     #region Helpers
     private void AddLocalizedCommand(string key, string command)
@@ -446,6 +532,18 @@ namespace Oxide.Plugins
           return false;
         }, this);
     }
+
+    [Command("pb.update_channels")]
+    private void ConsoleCommandUpdateChannels(IPlayer player, string command, string[] args)
+    {
+      UpdateChannels();
+    }
+
+    [Command("pb.channels")]
+    private void ConsoleCommandChannels(IPlayer player, string command, string[] args)
+    {
+      PrintChannels((args.Length != 0));
+    }
+    #endregion
   }
-  #endregion
 }
