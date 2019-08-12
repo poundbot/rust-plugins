@@ -9,7 +9,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.3.0")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.4.0")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -129,13 +129,31 @@ namespace Oxide.Plugins
           ["chat.DateFormat"] = "[HH:mm]",
           ["console.ClanTag"] = "[{0}] ",
           ["console.Msg"] = "{{DSCD}} {0}: {1}",
-          ["config.upgrading"] = "Upgrading config to v{0}"
+          ["config.upgrading"] = "Upgrading config to v{0}",
+          ["config.chat_config_updated"] = "Config updated. Check oxide/config/PoundBotChatRelay.json",
+          ["usage.chat_config"] = @"Usage:
+pb.chat_config <channel|server_channel|styled|styled_color|server_styled|server_styled_color> [value]
+
+If value is not supplied, prints the current value.
+
+The values 'styled' and 'server_styled' are booleans, and must be set to '0', '1', 'true', or 'false'.
+
+It is recommended you use the channel IDs rather than channel names for 'channel' and 'server_channel'.
+
+See 'pb.channels' for information about your channels.",
+          ["setting.is"] = "Setting {0} is {1}",
         }, this);
     }
 
     void OnServerInitialized()
     {
       UpgradeConfig();
+      ApplyConfig();
+      StartChatRunners();
+    }
+
+    void ApplyConfig()
+    {
       RequestHeaders = new Dictionary<string, string>
       {
         ["X-PoundBotChatRelay-Version"] = Version.ToString()
@@ -173,12 +191,19 @@ namespace Oxide.Plugins
       {
         RelayChatColor = (string)Config["chat.styled_color"];
       }
+      else
+      {
+        RelayChatColor = null;
+      }
+
       if ((bool)Config["chat.server_styled"])
       {
         RelayServerChatColor = (string)Config["chat.server_styled_color"];
       }
-
-      StartChatRunners();
+      else
+      {
+        RelayServerChatColor = null;
+      }
     }
 
     void Unload() => KillChatRunners();
@@ -318,14 +343,14 @@ namespace Oxide.Plugins
 
       if (RelayChatColor != null)
       {
-        Dictionary<string, object> m = (Dictionary<string, object>)data["Message"];
+        Dictionary<string, object> m = (Dictionary<string, object>)data["MessageSettings"];
 
         color = (string)m["Color"];
       }
 
       IPlayer player = (IPlayer)data["Player"];
 
-      SendToPoundBot(player, (string)data["Text"], RelayChatChannel, color);
+      SendToPoundBot(player, (string)data["Message"], RelayChatChannel, color);
     }
 
     void SendToPoundBot(IPlayer player, string message, string channel, string embed_color = null)
@@ -358,5 +383,53 @@ namespace Oxide.Plugins
         new object[] { this, channel, message_parts, embed_color, null, RequestHeaders }
       );
     }
+
+    #region Commands
+    //channel|server_channel|styled|styled_color|server_styled|server_styled_color
+    [Command("pb.chat_config")]
+    private void ConsoleCommandSetChatConfig(IPlayer player, string command, string[] args)
+    {
+      if (args.Count() < 1 || args.Count() > 2)
+      {
+        Puts(lang.GetMessage("usage.chat_config", this));
+        return;
+      }
+
+      var configName = $"chat.{args[0]}";
+
+      if (args.Count() == 1)
+      {
+        Puts(string.Format(lang.GetMessage("setting.is", this), configName, Config[configName]));
+        return;
+      }
+
+      object configValue;
+
+      switch (args[0])
+      {
+        // All the string cases
+        case "channel":
+        case "server_channel":
+        case "styled_color":
+        case "server_styled_color":
+          configValue = args[1];
+          break;
+
+        // All the boolean cases
+        case "styled":
+        case "server_styled":
+          configValue = (args[1] == "1" || args[1].ToLower() == "true");
+          break;
+        default:
+          Puts(lang.GetMessage("usage.chat_config", this));
+          return;
+      }
+
+      Puts(lang.GetMessage("config.chat_config_updated", this));
+      Config[configName] = configValue;
+      SaveConfig();
+      ApplyConfig();
+    }
+    #endregion
   }
 }

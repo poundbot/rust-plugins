@@ -6,6 +6,7 @@ using Oxide.Core.Plugins;
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace Oxide.Plugins
 {
@@ -178,6 +179,7 @@ namespace Oxide.Plugins
       lang.RegisterMessages(new Dictionary<string, string>
       {
         ["config.upgrading"] = "Upgrading config to v{0}",
+        ["config.api_key_updated"] = "Your API key has been updated. Check config/PoundBot.json.",
         ["command.poundbot_register"] = "pbreg",
         ["connector.reconnected"] = "Reconnected with PoundBot",
         ["connector.time_in_error"] = "Total time in error: {0}",
@@ -189,7 +191,9 @@ namespace Oxide.Plugins
         ["discord.channels_updated"] = "Channel cache updated.",
         ["discord.channel_cannot_send"] = "Cannot send to channel {0}. Please check that the bot can send to this channel. Run pb.updatechannels after making Discord changes to update the cache.",
         ["discord.channel_cannot_style"] = "Cannot send to channel {0}. Please check that the bot can embed links to this channel. Run pb.updatechannels after making Discord changes to update the cache.",
-        ["usage"] = "Usage: /pbreg \"<discord name>\"\n Example: /discord \"Fancy Guy#8080\"",
+        ["usage.pbreg"] = "Usage: /pbreg \"<discord name>\"\n Example: /discord \"Fancy Guy#8080\"",
+        ["usage.set_api_key"] = "Usage:\n\tpb.set_api_key <api key>",
+        ["discord.console.registration_attempt"] = "Player {0}({1}) attempting to register as {2}",
       }, this);
     }
 
@@ -201,14 +205,7 @@ namespace Oxide.Plugins
       UpgradeConfig();
       ApiBaseURI = $"{Config["api.url"]}api";
       ApiMessageBaseURI = $"/messages";
-      RequestHeaders = new Dictionary<string, string>
-      {
-        ["Content-type"] = "application/json",
-        ["Authorization"] = $"Token {Config["api.key"]}",
-        ["X-PoundBotConnector-Version"] = Version.ToString(),
-        ["User-Agent"] = $"PoundBotConnector/{Version.ToString()}",
-        ["X-PoundBot-Game"] = covalence.Game.ToLower()
-      };
+      ApplyConfig();
 
       RegisteredUsersGroup = (string)Config["players.registered.group"];
       permission.RegisterPermission(RegisteredUsersGroup, this);
@@ -269,6 +266,18 @@ namespace Oxide.Plugins
       });
     }
     #endregion
+
+    private void ApplyConfig()
+    {
+      RequestHeaders = new Dictionary<string, string>
+      {
+        ["Content-type"] = "application/json",
+        ["Authorization"] = $"Token {Config["api.key"]}",
+        ["X-PoundBotConnector-Version"] = Version.ToString(),
+        ["User-Agent"] = $"PoundBotConnector/{Version.ToString()}",
+        ["X-PoundBot-Game"] = covalence.Game.ToLower()
+      };
+    }
 
     #region API
 
@@ -510,9 +519,18 @@ namespace Oxide.Plugins
     {
       if (args.Length != 1)
       {
-        player.Message(lang.GetMessage("usage", this, player.Id));
+        player.Message(lang.GetMessage("usage.pbreg", this, player.Id));
         return;
       }
+
+      Regex r = new Regex(@"^[^#]+#[0-9]+$");
+      if (!r.Match(args[0]).Success)
+      {
+        player.Message(lang.GetMessage("usage.pbreg", this, player.Id));
+        return;
+      }
+
+      string.Format(lang.GetMessage("discord.console.registration_attempt", this), player.Name, player.Id, args[0]);
 
       var da = new DiscordAuth(player.Name, args[0], player.Id);
 
@@ -543,6 +561,19 @@ namespace Oxide.Plugins
     private void ConsoleCommandChannels(IPlayer player, string command, string[] args)
     {
       PrintChannels((args.Length != 0));
+    }
+
+    [Command("pb.set_api_key")]
+    private void ConsoleCommandSetAPIKey(IPlayer player, string command, string[] args)
+    {
+      if (args.Count() != 1)
+      {
+        Puts(lang.GetMessage("usage.set_api_key", this));
+      }
+      Puts(lang.GetMessage("config.api_key_updated", this));
+      Config["api.key"] = args[0];
+      SaveConfig();
+      ApplyConfig();
     }
     #endregion
   }

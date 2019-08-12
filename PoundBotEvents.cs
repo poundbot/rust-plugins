@@ -54,7 +54,7 @@ namespace Oxide.Plugins
           ["user.clan_tag"] = "[{0}]",
           ["dateformat"] = "[HH:mm]",
           ["events.connected.prefix"] = ":arrow_right::video_game: ",
-          ["events.connected.message"] = " has join the server",
+          ["events.connected.message"] = " has joined the server",
           ["events.disconnected.prefix"] = ":x::video_game: ",
           ["events.disconnected.message"] = " has left the server",
           ["events.deathnotes.prefix"] = ":skull_crossbones: ",
