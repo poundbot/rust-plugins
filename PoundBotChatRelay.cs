@@ -9,7 +9,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "1.4.0")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "2.0.0")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -17,10 +17,7 @@ namespace Oxide.Plugins
     [PluginReference]
     private Plugin PoundBot, Clans;
 
-    const string ChatURI = "/chat";
-
     protected int ApiChatRunnersCount;
-    private Dictionary<string, string> RequestHeaders;
     private bool RelayDiscordChat;
     private bool RelayGiveNotices;
     private bool RelayServerChat;
@@ -154,11 +151,6 @@ See 'pb.channels' for information about your channels.",
 
     void ApplyConfig()
     {
-      RequestHeaders = new Dictionary<string, string>
-      {
-        ["X-PoundBotChatRelay-Version"] = Version.ToString()
-      };
-
       if (!(bool)Config["relay.chat"])
       {
         Unsubscribe("OnUserChat");
@@ -301,7 +293,7 @@ See 'pb.channels' for information about your channels.",
       {
         if (!cr.Running)
         {
-          if ((bool)PoundBot.Call("API_RequestGet", new object[] { ChatURI, null, callback, this, RequestHeaders }))
+          if ((bool)PoundBot.Call("API_GetChannelMessage", new object[] { this, "chat", callback }))
           {
             cr.LastRun = DateTime.UtcNow;
             cr.Running = true;
@@ -380,7 +372,7 @@ See 'pb.channels' for information about your channels.",
       message_parts[3] = new KeyValuePair<string, bool>(message, true);
       PoundBot.Call(
         "API_SendChannelMessage",
-        new object[] { this, channel, message_parts, embed_color, null, RequestHeaders }
+        new object[] { this, channel, message_parts, embed_color, null }
       );
     }
 

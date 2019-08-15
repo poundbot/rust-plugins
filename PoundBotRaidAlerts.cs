@@ -3,12 +3,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
 using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "1.2.3")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.0")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -16,28 +15,10 @@ namespace Oxide.Plugins
     [PluginReference]
     private Plugin PoundBot;
 
-    const string EntityDeathURI = "/entity_death";
-
     private Dictionary<string, string> RequestHeaders;
     private bool ShowOwnDamage;
     private bool PermittedOnly;
     private string PermittedGroup;
-
-    class EntityDeath
-    {
-      public string Name;
-      public string GridPos;
-      public string[] OwnerIDs;
-      public DateTime CreatedAt;
-
-      public EntityDeath(string name, string gridpos, string[] ownerIDs)
-      {
-        Name = name;
-        GridPos = gridpos;
-        OwnerIDs = ownerIDs;
-        CreatedAt = DateTime.UtcNow;
-      }
-    }
 
     //"Group {PermittedGroup} does not exist. Check permitted_only.group in config/PoundBotRaidAlerts.json or set permitted_only.enabled to false"
     #region Language
@@ -185,14 +166,12 @@ namespace Oxide.Plugins
         string[] words = entity.ShortPrefabName.Split('/');
         string name = words[words.Length - 1].Split('.')[0];
 
-        EntityDeath di = new EntityDeath(name, GridPos(entity), owners);
-
         Func<int, string, bool> callback = EntityDeathHandler;
 
+        Puts(GridPos(entity));
+
         PoundBot.Call(
-          "API_RequestPut", new object[] {
-            EntityDeathURI, JsonConvert.SerializeObject(di), callback, this, RequestHeaders
-          }
+          "API_SendEntityDeath", new object[] { this, name, GridPos(entity), owners, callback }
         );
       }
     }
@@ -201,10 +180,10 @@ namespace Oxide.Plugins
 
     private string GridPos(BaseEntity entity)
     {
-      var size = World.Size;
+      var size = World.Size / 2;
       var gridCellSize = 150;
-      var num2 = (int)(entity.transform.position.x + (size / 2)) / gridCellSize;
-      var index = Math.Abs((int)(entity.transform.position.z - (size / 2)) / gridCellSize);
+      var num2 = (int)(entity.transform.position.x + size) / gridCellSize;
+      var index = Math.Abs((int)(entity.transform.position.z - size) / gridCellSize);
       return NumberToLetter(num2) + index.ToString();
     }
 

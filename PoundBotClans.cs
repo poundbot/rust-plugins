@@ -9,17 +9,13 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "1.2.2")]
+  [Info("Pound Bot Clans", "MrPoundsign", "2.0.0")]
   [Description("Clans support for PoundBot")]
 
   class PoundBotClans : CovalencePlugin
   {
     [PluginReference]
     private Plugin PoundBot, Clans;
-
-    const string ClansURI = "/clans";
-
-    private Dictionary<string, string> RequestHeaders;
 
     #region Oxide Hooks
     protected override void LoadDefaultMessages()
@@ -35,7 +31,6 @@ namespace Oxide.Plugins
 
     void OnServerInitialized()
     {
-      RequestHeaders = new Dictionary<string, string> { ["X-PoundBotClans-Version"] = Version.ToString() };
       SendClans();
     }
 
@@ -54,7 +49,7 @@ namespace Oxide.Plugins
 
       Func<int, string, bool> callback = AcceptedHandler;
 
-      PoundBot.Call("API_RequestPut", new object[] { ClansURI, JsonConvert.SerializeObject(clans), callback, this, RequestHeaders });
+      PoundBot.Call("API_SendClans", new object[] { this, clans, callback });
     }
 
     #region Clans Hooks
@@ -66,7 +61,7 @@ namespace Oxide.Plugins
 
       Func<int, string, bool> callback = AcceptedHandler;
 
-      PoundBot.Call("API_RequestPut", new object[] { $"{ClansURI}/{tag}", JsonConvert.SerializeObject(clan), callback, this, RequestHeaders });
+      PoundBot.Call("API_SendClan", new object[] { this, tag, clan, callback });
     }
 
     void OnClanUpdate(string tag) => OnClanCreate(tag);
@@ -77,7 +72,7 @@ namespace Oxide.Plugins
 
       Puts(string.Format(lang.GetMessage("sending_clan_delete", this), tag));
 
-      PoundBot.Call("API_RequestDelete", new object[] { $"{ClansURI}/{tag}", null, callback, this, RequestHeaders });
+      PoundBot.Call("API_DeleteClan", new object[] { this, tag, callback });
     }
     #endregion
 

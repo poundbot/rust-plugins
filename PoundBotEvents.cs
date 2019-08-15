@@ -7,7 +7,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Events", "MrPoundsign", "1.4.0")]
+  [Info("Pound Bot Events", "MrPoundsign", "2.0.0")]
   [Description("Relays events for PoundBot")]
 
   class PoundBotEvents : CovalencePlugin
@@ -81,7 +81,7 @@ namespace Oxide.Plugins
     protected string ChannelColor(string channel_name)
     {
       string channelColor = (string)Config[$"events.{channel_name}.color"];
-      if (channelColor == "")
+      if (channelColor.Length == 0)
       {
         return null;
       }
@@ -103,21 +103,21 @@ namespace Oxide.Plugins
 
     private void OnUserConnected(IPlayer player)
     {
-      if (EventPlayerConnectionsChannel == "") return;
+      if (EventPlayerConnectionsChannel.Length == 0) return;
 
       SendToPoundBot(player, "connected", EventPlayerConnectionsChannel, EventPlayerConnectionsColor);
     }
 
     private void OnUserDisconnected(IPlayer player)
     {
-      if (EventDisconnectedChannel == "") return;
+      if (EventDisconnectedChannel.Length == 0) return;
 
       SendToPoundBot(player, "disconnected", EventPlayerConnectionsChannel, EventPlayerConnectionsColor);
     }
 
     void OnDeathNotice(Dictionary<string, object> data, string message)
     {
-      if (EventDeathNotesChannel == "") return;
+      if (EventDeathNotesChannel.Length == 0) return;
       KeyValuePair<string, bool>[] message_parts = new KeyValuePair<string, bool>[2]
       {
         new KeyValuePair<string, bool>(lang.GetMessage("events.deathnotes.prefix", this), false),
@@ -132,14 +132,14 @@ namespace Oxide.Plugins
 
     void OnUserBanned(string name, string id, string address, string reason)
     {
-      if (EventBanKickChannel == "") return;
+      if (EventBanKickChannel.Length == 0) return;
 
       SendToPoundBot(name, "banned", EventBanKickChannel, EventBanKickColor);
     }
 
     void OnUserKicked(IPlayer player, string reason)
     {
-      if (EventBanKickChannel == "") return;
+      if (EventBanKickChannel.Length == 0) return;
 
       SendToPoundBot(player, "kicked", EventBanKickChannel, EventBanKickColor);
     }
@@ -160,7 +160,7 @@ namespace Oxide.Plugins
 
     void SendToPoundBot(string playerName, string eventType, string channel, string embed_color = null)
     {
-      if (channel == "")
+      if (channel.Length == 0)
       {
         Puts("Channel not defined. Please set your channel names in config/PoundBotEvents.json.");
         return;

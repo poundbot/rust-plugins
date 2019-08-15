@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Oxide.Core;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
@@ -10,13 +11,25 @@ using System.Text.RegularExpressions;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot", "MrPoundsign", "1.4.0")]
+  [Info("Pound Bot", "MrPoundsign", "2.0.1")]
   [Description("Connector for the Discord bot PoundBot.")]
 
   class PoundBot : CovalencePlugin
   {
+    const string EntityDeathURI = "/entity_death";
+    const string ApiMessageBaseURI = "/messages";
+    const string ApiRolesURI = "/roles";
+    const string ApiChatURI = "/chat";
+    const string ApiRegisteredPlayersURI = "/players/registered";
+    const string ApiDiscordAuthURI = "/discord_auth";
+    const string ApiClansURI = "/clans";
+
     private string ApiBaseURI;
-    private string ApiMessageBaseURI;
+
+    enum DebugLevels { TRACE, INFO };
+
+    protected string DebugURI = "";
+    protected int DebugLevel = (int)DebugLevels.INFO;
     protected int ApiRetrySeconds = 1;
     protected int ApiRetryNotify = 30;
 
@@ -35,6 +48,25 @@ namespace Oxide.Plugins
       public string Error;
     }
 
+    class ApiRequest
+    {
+      public RequestMethod Method;
+      public string URI;
+      public string Body;
+      public Plugin Plugin;
+      public string RequestUUID;
+
+      public ApiRequest(RequestMethod method, string uri, string body, Plugin plugin)
+      {
+        Method = method;
+        URI = uri;
+        Body = body;
+        Plugin = plugin;
+        RequestUUID = Guid.NewGuid().ToString();
+      }
+    }
+
+    #region PoundBot messages
     class Channel
     {
       public string ID;
@@ -88,8 +120,7 @@ namespace Oxide.Plugins
 
       public DiscordAuth(string displayName, string discordName, string playerid)
       {
-        System.Random rnd = new System.Random();
-        Pin = rnd.Next(1, 9999);
+        Pin = new System.Random().Next(1, 9999);
         DisplayName = displayName;
         DiscordName = discordName;
         PlayerID = playerid;
@@ -114,6 +145,29 @@ namespace Oxide.Plugins
       public int Type { get; set; } // 0 = plain, 1 = embedded
       public GameMessageEmbedStyle EmbedStyle { get; set; }
     }
+
+    class RoleSyncRequest
+    {
+      public string GuildID;
+      public string[] PlayerIDs;
+    }
+
+    class EntityDeath
+    {
+      public string Name;
+      public string GridPos;
+      public string[] OwnerIDs;
+      public DateTime CreatedAt;
+
+      public EntityDeath(string name, string gridpos, string[] ownerIDs)
+      {
+        Name = name;
+        GridPos = gridpos;
+        OwnerIDs = ownerIDs;
+        CreatedAt = DateTime.UtcNow;
+      }
+    }
+    #endregion
 
     #region Configuration
     protected override void LoadDefaultConfig()
@@ -187,7 +241,9 @@ namespace Oxide.Plugins
         ["connector.error_with_rid"] = "Error communicating with PoundBot: [{0}] {1}:{2}",
         ["connector.user_error"] = "Cannot connect to PoundBot right now. Please alert the admins.",
         ["discord.pin"] = "Enter the following PIN to the bot in discord: {0}.",
-        ["discord.connected"] = "You are connected to discord.",
+        ["discord.connected"] = "You are registered.",
+        ["discord.already_connected"] = "You are already registered.",
+        ["discord.not_connected"] = "Registration not found.",
         ["discord.channels_updated"] = "Channel cache updated.",
         ["discord.channel_cannot_send"] = "Cannot send to channel {0}. Please check that the bot can send to this channel. Run pb.updatechannels after making Discord changes to update the cache.",
         ["discord.channel_cannot_style"] = "Cannot send to channel {0}. Please check that the bot can embed links to this channel. Run pb.updatechannels after making Discord changes to update the cache.",
@@ -204,7 +260,6 @@ namespace Oxide.Plugins
     {
       UpgradeConfig();
       ApiBaseURI = $"{Config["api.url"]}api";
-      ApiMessageBaseURI = $"/messages";
       ApplyConfig();
 
       RegisteredUsersGroup = (string)Config["players.registered.group"];
@@ -222,7 +277,7 @@ namespace Oxide.Plugins
       {
         if (RegisteredUsersInFlight) return;
         RegisteredUsersInFlight = true;
-        API_RequestGet("/players/registered", null,
+        Request(new ApiRequest(RequestMethod.GET, ApiRegisteredPlayersURI, null, this),
         (code, response) =>
         {
           RegisteredUsersInFlight = false;
@@ -262,7 +317,7 @@ namespace Oxide.Plugins
           Puts("Unuccessful registered players get");
           Puts(response);
           return false;
-        }, this);
+        });
       });
     }
     #endregion
@@ -362,23 +417,26 @@ namespace Oxide.Plugins
       return success;
     }
 
-    // Returns true if request was sent, false otherwise.
-    private bool API_Request(string uri, string body, Func<int, string, bool> callback, Plugin owner, RequestMethod method = RequestMethod.GET, Dictionary<string, string> headers = null)
+    #region Requests
+
+    private bool Request(ApiRequest api_request, Func<int, string, bool> callback)
     {
       if (!ApiRequestOk()) return false;
 
-      Dictionary<string, string> rHeaders = new Dictionary<string, string>(RequestHeaders);
-      rHeaders["X-Request-ID"] = Guid.NewGuid().ToString();
-
-      if (headers != null)
+      if (DebugURI.Length > 0 && api_request.URI.StartsWith(DebugURI))
       {
-        foreach (var pairs in headers)
-        {
-          rHeaders[pairs.Key] = pairs.Value;
-        }
+        Puts($"Request from {api_request.Plugin.Name} to {api_request.URI} with RequestUUID {api_request.RequestUUID}");
       }
 
-      webrequest.Enqueue($"{ApiBaseURI}{uri}", body,
+      if (api_request.Plugin == null)
+      {
+        api_request.Plugin = this;
+      }
+
+      Dictionary<string, string> rHeaders = new Dictionary<string, string>(RequestHeaders);
+      rHeaders["X-Request-ID"] = api_request.RequestUUID;
+
+      webrequest.Enqueue($"{ApiBaseURI}{api_request.URI}", api_request.Body,
       (code, response) =>
       {
         if (!ApiSuccess(callback(code, response)))
@@ -386,30 +444,18 @@ namespace Oxide.Plugins
           ApiError(code, response, rHeaders["X-Request-ID"]);
         }
       },
-      owner, method, rHeaders, 12000f);
+      api_request.Plugin, api_request.Method, rHeaders, 12000f);
+
       return true;
     }
-
-    private bool API_RequestGet(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
+    // Returns true if request was sent, false otherwise.
+    private bool API_Request(string uri, string body, Func<int, string, bool> callback, Plugin owner, RequestMethod method = RequestMethod.GET, Dictionary<string, string> headers = null)
     {
-      return API_Request(uri, body, callback, owner, RequestMethod.GET, headers);
+      return Request(new ApiRequest(method, uri, body, this), callback);
     }
+    #endregion
 
-    private bool API_RequestPost(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
-    {
-      return API_Request(uri, body, callback, owner, RequestMethod.POST, headers);
-    }
-
-    private bool API_RequestPut(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
-    {
-      return API_Request(uri, body, callback, owner, RequestMethod.PUT, headers);
-    }
-
-    private bool API_RequestDelete(string uri, string body, Func<int, string, bool> callback, Plugin owner, Dictionary<string, string> headers = null, float timeout = 0)
-    {
-      return API_Request(uri, body, callback, owner, RequestMethod.DELETE, headers);
-    }
-
+    #region Messages API
     private bool API_SendChannelMessage(Plugin owner, string channel, KeyValuePair<string, bool>[] message_parts, string embed_color = null, Func<int, string, bool> callback = null, Dictionary<string, string> headers = null, string type = "plain")
     {
       List<GameMessagePart> parts = new List<GameMessagePart>();
@@ -463,9 +509,47 @@ namespace Oxide.Plugins
       }
 
       string body = JsonConvert.SerializeObject(sm);
-      API_RequestPost($"{ApiMessageBaseURI}/{channel}", body, callback, owner, headers);
+      return Request(new ApiRequest(RequestMethod.POST, $"{ApiMessageBaseURI}/{channel}", body, owner), callback);
+    }
 
-      return true;
+    private bool API_GetChannelMessage(Plugin owner, string channel, Func<int, string, bool> callback = null)
+    {
+      return Request(new ApiRequest(RequestMethod.GET, ApiChatURI, null, owner), callback);
+    }
+    #endregion
+
+    #region Roles API
+    private bool API_SendRole(Plugin owner, string[] groupPlayerIDs, string role, Func<int, string, bool> callback)
+    {
+      RoleSyncRequest rsr = new RoleSyncRequest
+      {
+        PlayerIDs = groupPlayerIDs,
+      };
+
+      return Request(new ApiRequest(RequestMethod.POST, $"{ApiRolesURI}/{role}", JsonConvert.SerializeObject(rsr), owner), callback);
+    }
+    #endregion
+
+    private bool API_SendEntityDeath(Plugin owner, string name, string gridPos, string[] owners, Func<int, string, bool> callback)
+    {
+      EntityDeath di = new EntityDeath(name, gridPos, owners);
+
+      return Request(new ApiRequest(RequestMethod.PUT, EntityDeathURI, JsonConvert.SerializeObject(di), owner), callback);
+    }
+
+    private bool API_SendClans(Plugin owner, List<JObject> clans, Func<int, string, bool> callback)
+    {
+      return Request(new ApiRequest(RequestMethod.PUT, ApiClansURI, JsonConvert.SerializeObject(clans), owner), callback);
+    }
+
+    private bool API_SendClan(Plugin owner, string tag, JObject clan, Func<int, string, bool> callback)
+    {
+      return Request(new ApiRequest(RequestMethod.PUT, $"{ApiClansURI}/{tag}", JsonConvert.SerializeObject(clan), owner), callback);
+    }
+
+    private bool API_DeleteClan(Plugin owner, string tag, Func<int, string, bool> callback)
+    {
+      return Request(new ApiRequest(RequestMethod.DELETE, $"{ApiClansURI}/{tag}", null, owner), callback);
     }
 
     private void Connected()
@@ -477,7 +561,7 @@ namespace Oxide.Plugins
 
     private void UpdateChannels()
     {
-      API_RequestGet(ApiMessageBaseURI, null,
+      Request(new ApiRequest(RequestMethod.GET, ApiMessageBaseURI, null, this),
           (code, response) =>
           {
             if (code == 200)
@@ -488,7 +572,7 @@ namespace Oxide.Plugins
             }
 
             return false;
-          }, this);
+          });
     }
 
     public void PrintChannels(bool all = false)
@@ -523,6 +607,29 @@ namespace Oxide.Plugins
         return;
       }
 
+      if (args[0] == "check")
+      {
+        Request(new ApiRequest(RequestMethod.GET, $"{ApiDiscordAuthURI}/check/{player.Id}", null, this),
+        (code, response) =>
+        {
+          if (code == 200)
+          {
+            player.Message(lang.GetMessage("discord.connected", this, player.Id));
+            return true;
+          }
+
+          if (code == 404) // Method not allowed means we're already connected
+          {
+            player.Message(lang.GetMessage("discord.not_connected", this, player.Id));
+            return true;
+          }
+
+          return false;
+        });
+
+        return;
+      }
+
       Regex r = new Regex(@"^[^#]+#[0-9]+$");
       if (!r.Match(args[0]).Success)
       {
@@ -534,7 +641,7 @@ namespace Oxide.Plugins
 
       var da = new DiscordAuth(player.Name, args[0], player.Id);
 
-      API_RequestPut("/discord_auth", JsonConvert.SerializeObject(da),
+      Request(new ApiRequest(RequestMethod.PUT, ApiDiscordAuthURI, JsonConvert.SerializeObject(da), this),
         (code, response) =>
         {
           if (code == 200)
@@ -542,13 +649,15 @@ namespace Oxide.Plugins
             player.Message(string.Format(lang.GetMessage("discord.pin", this, player.Id), da.Pin.ToString("D4")));
             return true;
           }
-          else if (code == 405) // Method not allowed means we're already connected
+
+          if (code == 409) // Conflict means we're already connected
           {
-            player.Message(lang.GetMessage("discord.connected", this, player.Id));
+            player.Message(lang.GetMessage("discord.already_connected", this, player.Id));
             return true;
           }
+
           return false;
-        }, this);
+        });
     }
 
     [Command("pb.update_channels")]
@@ -569,11 +678,25 @@ namespace Oxide.Plugins
       if (args.Count() != 1)
       {
         Puts(lang.GetMessage("usage.set_api_key", this));
+        return;
       }
+
       Puts(lang.GetMessage("config.api_key_updated", this));
       Config["api.key"] = args[0];
       SaveConfig();
       ApplyConfig();
+    }
+
+    [Command("pb.set_debug_uri")]
+    private void ConsoleCommandSetDebugURI(IPlayer player, string command, string[] args)
+    {
+      if (args.Count() != 1)
+      {
+        Puts(lang.GetMessage("usage.set_debug_uri", this));
+        return;
+      }
+
+      DebugURI = args[0];
     }
     #endregion
   }
