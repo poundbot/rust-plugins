@@ -7,9 +7,13 @@ using Newtonsoft.Json;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 
+#if RUST
+using ConVar;
+#endif
+
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Chat Relay", "MrPoundsign", "2.0.0")]
+  [Info("Pound Bot Chat Relay", "MrPoundsign", "2.0.3")]
   [Description("Chat relay for use with PoundBot")]
 
   class PoundBotChatRelay : CovalencePlugin
@@ -322,14 +326,31 @@ See 'pb.channels' for information about your channels.",
       if (!RelayServerChat && !isGaveMessage) return;
       if (!RelayGiveNotices && isGaveMessage) return;
 
+      if (message == "Wow, no one played so no one won.") return;
+
       SendToPoundBot(name, message, RelayServerChannel, RelayServerChatColor);
     }
 
-    void OnUserChat(IPlayer player, string message) => SendToPoundBot(player, message, RelayChatChannel, RelayChatColor);
+#if RUST
+    void OnPlayerChat(BasePlayer bplayer, string message, Chat.ChatChannel chatchannel)
+    {
+      if (chatchannel == Chat.ChatChannel.Team) return;
+      IPlayer player = bplayer.IPlayer;
+#else
+    void OnUserChat(IPlayer player, string message)
+    {
+#endif
+      if (UseBetterChat) return;
+      SendToPoundBot(player, message, RelayChatChannel, RelayChatColor);
+    }
 
     void OnBetterChat(Dictionary<string, object> data)
     {
       if (!UseBetterChat) return;
+
+#if RUST
+      if ((Chat.ChatChannel)data["ChatChannel"] == Chat.ChatChannel.Team) return;
+#endif
 
       string color = RelayChatColor;
 
@@ -359,7 +380,7 @@ See 'pb.channels' for information about your channels.",
 
     void SendToPoundBot(string player, string message, string channel, string embed_color = null)
     {
-      if (channel == "")
+      if (channel.Length == 0)
       {
         Puts("Channel not defined. Please set your channel names in config/PoundBotChatRelay.json.");
         return;
