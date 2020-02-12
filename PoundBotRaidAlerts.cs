@@ -7,7 +7,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.0")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.1")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -167,8 +167,6 @@ namespace Oxide.Plugins
         string name = words[words.Length - 1].Split('.')[0];
 
         Func<int, string, bool> callback = EntityDeathHandler;
-
-        Puts(GridPos(entity));
 
         PoundBot.Call(
           "API_SendEntityDeath", new object[] { this, name, GridPos(entity), owners, callback }
