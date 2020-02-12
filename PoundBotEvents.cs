@@ -7,7 +7,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Events", "MrPoundsign", "2.0.0")]
+  [Info("Pound Bot Events", "MrPoundsign", "2.0.2")]
   [Description("Relays events for PoundBot")]
 
   class PoundBotEvents : CovalencePlugin
@@ -24,7 +24,7 @@ namespace Oxide.Plugins
     protected string EventBanKickChannel;
     protected string EventBanKickColor;
 
-    public static string StrupColor(string input) => Regex.Replace(input, "</{0,1}color(=[^>]*|)>", string.Empty);
+    public static string StripColor(string input) => Regex.Replace(input, "</{0,1}color(=[^>]*|)>", string.Empty);
 
 
     #region Configuration
@@ -34,8 +34,11 @@ namespace Oxide.Plugins
       Config["config.version"] = 0;
       Config["events.default.channel"] = "";
 
-      Config["events.playerconnections.channel"] = "default";
-      Config["events.playerconnections.color"] = "";
+      Config["events.connected.channel"] = "default";
+      Config["events.connected.color"] = "";
+
+      Config["events.disconnected.channel"] = "default";
+      Config["events.disconnected.color"] = "";
 
       Config["events.deathnotes.channel"] = "default";
       Config["events.deathnotes.color"] = "";
@@ -89,10 +92,18 @@ namespace Oxide.Plugins
       return channelColor;
     }
 
-    protected void OnServerInitialized()
+    void OnInboundBroadcast(Dictionary<string, string> data)
     {
-      EventPlayerConnectionsChannel = ChannelID("playerconnections");
-      EventPlayerConnectionsColor = ChannelColor("playerconnections");
+      Puts($"OnInboundBroadcast: {data["type"]} {data["message"]}");
+    }
+
+    void Init()
+    {
+      EventPlayerConnectionsChannel = ChannelID("connected");
+      EventPlayerConnectionsColor = ChannelColor("connected");
+
+      EventDisconnectedChannel = ChannelID("disconnected");
+      EventDisconnectedColor = ChannelColor("disconnected");
 
       EventDeathNotesChannel = ChannelID("deathnotes");
       EventDeathNotesColor = ChannelColor("deathnotes");
@@ -121,7 +132,7 @@ namespace Oxide.Plugins
       KeyValuePair<string, bool>[] message_parts = new KeyValuePair<string, bool>[2]
       {
         new KeyValuePair<string, bool>(lang.GetMessage("events.deathnotes.prefix", this), false),
-        new KeyValuePair<string, bool>(StrupColor(message), true),
+        new KeyValuePair<string, bool>(StripColor(message), true),
       };
 
       PoundBot.Call(
@@ -146,7 +157,6 @@ namespace Oxide.Plugins
 
     void SendToPoundBot(IPlayer player, string eventType, string channel, string embed_color = null)
     {
-
       string playerName = player.Name;
       var clanTag = (string)Clans?.Call("GetClanOf", player);
       if (!string.IsNullOrEmpty(clanTag))
@@ -155,7 +165,6 @@ namespace Oxide.Plugins
       }
 
       SendToPoundBot(playerName, eventType, channel, embed_color);
-
     }
 
     void SendToPoundBot(string playerName, string eventType, string channel, string embed_color = null)
