@@ -3,11 +3,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
+using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.2")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.3")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -18,7 +20,8 @@ namespace Oxide.Plugins
     private Dictionary<string, string> RequestHeaders;
     private bool ShowOwnDamage;
     private bool PermittedOnly;
-    const string PermissionName = "poundbot.raidalerts";
+    const string RaiAlertsPermission = "poundbotraidalerts.alert";
+    const string RaiAlertsTestPermission = "poundbotraidalerts.test";
 
     #region Language
     protected override void LoadDefaultMessages()
@@ -32,7 +35,8 @@ namespace Oxide.Plugins
 
     private void Init()
     {
-      permission.RegisterPermission(PermissionName, this);
+      permission.RegisterPermission(RaiAlertsPermission, this);
+      permission.RegisterPermission(RaiAlertsTestPermission, this);
     }
 
     void OnServerInitialized()
@@ -116,7 +120,7 @@ namespace Oxide.Plugins
       SendEntityDeath(victim, info?.Initiator);
     }
 
-    void SendEntityDeath(BaseEntity entity, BaseEntity initiator)
+    void SendEntityDeath(BaseEntity entity, BaseEntity initiator, bool test = false)
     {
       if (entity == null) return;
       if (initiator == null) return;
@@ -124,22 +128,50 @@ namespace Oxide.Plugins
       if (initiator is NPCMurderer) return;
       if (initiator is BasePlayer)
       {
-        if (entity.OwnerID == 0) return;
+        string[] w = entity.ShortPrefabName.Split('/');
+        string n = w[w.Length - 1].Split('.')[0];
+
+        int eid = entity.GetInstanceID();
+
+        n = $"[{n}:{eid}]";
+
+        if (!test && entity.OwnerID == 0)
+        {
+          if (test) Puts($"{n} Could not find owner. Not sending alert.");
+          return;
+        }
         BasePlayer player = (BasePlayer)initiator;
 
-        if (!ShowOwnDamage && entity.OwnerID == player.userID) return;
+        if (!test && !ShowOwnDamage && entity.OwnerID == player.userID)
+        {
+          if (test) Puts($"{n} Show own damage is false. Not sending alert.");
+          return;
+        }
 
         BuildingPrivlidge priv = entity.GetBuildingPrivilege();
         string[] ownerIDs;
 
         if (priv != null)
         {
+          if (test) Puts($"{n} Checking building privs");
           ownerIDs = priv.authorizedPlayers.Select(p => { return p.userid.ToString(); }).ToArray();
         }
         else
         {
-          ownerIDs = new string[] { entity.OwnerID.ToString() };
+          if (test)
+          {
+            Puts($"{n} setting owners IDs to testing user");
+            ownerIDs = new string[] { player.userID.ToString() };
+          }
+          else
+          {
+            ownerIDs = new string[] { entity.OwnerID.ToString() };
+          }
         }
+
+        if (test) Puts($"{n} ownerIDs are {String.Join(",", ownerIDs)}");
+
+        if (test) Puts($"{n} Registered Players Group is {(string)PoundBot.Call("API_RegisteredUsersGroup")}");
 
         // Filter Owners to those who are registered with PoundBot
         string[] registeredPlayerIDs = permission.GetUsersInGroup((string)PoundBot.Call("API_RegisteredUsersGroup"));
@@ -149,23 +181,34 @@ namespace Oxide.Plugins
           registeredPlayerIDs[i] = registeredPlayerIDs[i].Substring(0, registeredPlayerIDs[i].IndexOf(' '));
         }
 
+        if (test) Puts($"{n} rgisteredPlayersIDs are {String.Join(",", registeredPlayerIDs)}");
+
         ownerIDs = ownerIDs.Intersect(registeredPlayerIDs).ToArray();
-        if (ownerIDs.Length == 0) return;
+
+        if (test) Puts($"{n} intersecting ownerIDs are {String.Join(",", ownerIDs)}");
 
         if (PermittedOnly)
         {
-          ownerIDs = ownerIDs.Where(ownerID => permission.UserHasPermission(ownerID, PermissionName)).ToArray();
+          if (test) Puts($"{n} PermittedOnly is true. Checking perms.");
+          ownerIDs = ownerIDs.Where(ownerID => permission.UserHasPermission(ownerID, RaiAlertsPermission)).ToArray();
         }
 
-        if (ownerIDs.Length == 0) return;
+        if (ownerIDs.Length == 0)
+        {
+          if (test) Puts($"{n} Owners length is 0. Not sending alert.");
+          return;
+        }
 
-        string[] words = entity.ShortPrefabName.Split('/');
-        string name = words[words.Length - 1].Split('.')[0];
+        if (test)
+        {
+          Puts($"{n} Sending entity death to PoundBot");
+          n = "TEST_" + n;
+        }
 
         Func<int, string, bool> callback = EntityDeathHandler;
 
         PoundBot.Call(
-          "API_SendEntityDeath", new object[] { this, name, GridPos(entity), ownerIDs, callback }
+          "API_SendEntityDeath", new object[] { this, n, GridPos(entity), ownerIDs, callback }
         );
       }
     }
@@ -193,5 +236,22 @@ namespace Oxide.Plugins
       }
       return empty + Convert.ToChar(65 + num2).ToString();
     }
+
+    #region Commands
+    [ChatCommand("rat"), Permission(RaiAlertsTestPermission)]
+    private void CmdRat(BasePlayer p, string command, string[] args)
+    {
+      RaycastHit raycastHit;
+      BaseEntity targetEntity;
+
+      bool flag = Physics.Raycast(p.eyes.HeadRay(), out raycastHit, 500f, Rust.Layers.Solid);
+      targetEntity = flag? raycastHit.GetEntity() : null;
+
+      Puts($"targetEntity is {targetEntity}");
+
+      if (targetEntity != null ) SendEntityDeath(targetEntity, p, true);
+
+    }
+    #endregion
   }
 }

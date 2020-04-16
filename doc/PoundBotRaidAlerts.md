@@ -7,7 +7,8 @@ Install the Pound Bot plugin and follow the instructions there.
 
 ## Permissions
 
-- `poundbot.raidalerts` - Allows users to receive raid alerts i `permitted_only.enabled` is `true` in the config
+- `poundbotraidalerts.alert` - Allows users to receive raid alerts i `permitted_only.enabled` is `true` in the config
+- `poundbotraidalerts.test` - Allows use of the `/rat` command to test raid alerts
 
 ## Configuration
 
