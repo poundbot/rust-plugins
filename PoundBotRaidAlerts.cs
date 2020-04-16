@@ -7,7 +7,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.1")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.2")]
   [Description("Raid Alerts for use with PoundBot")]
 
   class PoundBotRaidAlerts : RustPlugin
@@ -18,19 +18,22 @@ namespace Oxide.Plugins
     private Dictionary<string, string> RequestHeaders;
     private bool ShowOwnDamage;
     private bool PermittedOnly;
-    private string PermittedGroup;
+    const string PermissionName = "poundbot.raidalerts";
 
-    //"Group {PermittedGroup} does not exist. Check permitted_only.group in config/PoundBotRaidAlerts.json or set permitted_only.enabled to false"
     #region Language
     protected override void LoadDefaultMessages()
     {
       lang.RegisterMessages(new Dictionary<string, string>
       {
-        ["error.permitted_group_missing"] = "Group {0} does not exist. Check permitted_only.group in config/PoundBotRaidAlerts.json or set permitted_only.enabled to false",
         ["config.upgrading"] = "Upgrading config to v{0}"
       }, this);
     }
     #endregion
+
+    private void Init()
+    {
+      permission.RegisterPermission(PermissionName, this);
+    }
 
     void OnServerInitialized()
     {
@@ -41,41 +44,40 @@ namespace Oxide.Plugins
       };
       ShowOwnDamage = (bool)Config["debug.show_own_damage"];
       PermittedOnly = (bool)Config["permitted_only.enabled"];
-      PermittedGroup = (string)Config["permitted_only.group"];
     }
 
     #region Configuration
     protected override void LoadDefaultConfig()
     {
-      Config["config.version"] = 2;
+      Config["config.version"] = 3;
       Config["debug.show_own_damage"] = false;
       Config["permitted_only.enabled"] = false;
-      Config["permitted_only.group"] = "vip";
     }
 
     void UpgradeConfig()
     {
-      string configVersion = "config.version";
+      string cvKey = "config.version";
       bool dirty = false;
 
-      if (Config[configVersion] == null)
+      if (Config[cvKey] == null)
       {
-        Config[configVersion] = 1;
+        Config[cvKey] = 1;
       }
       else
       {
         try
         {
-          var foo = (string)Config[configVersion];
-          Config[configVersion] = 2;
+          var foo = (string)Config[cvKey];
+          Config[cvKey] = 2;
           dirty = true;
         }
         catch (InvalidCastException) { } // testing if it can be converted to a string or not. No need to change it because it's not a string.
       }
 
-      if ((int)Config["config.version"] < 2)
+      int currentVersion = (int)Config[cvKey];
+
+      if (currentVersion < 2)
       {
-        Puts(string.Format(lang.GetMessage("config.upgrading", this), 2));
         if (Config["show_own_damage"] != null)
         {
           Config["debug.show_own_damage"] = (bool)Config["show_own_damage"];
@@ -86,8 +88,14 @@ namespace Oxide.Plugins
         }
         Config.Remove("show_own_damage");
         Config["permitted_only.enabled"] = false;
-        Config["permitted_only.group"] = "vip";
-        Config["config.version"] = 2;
+        dirty = true;
+      }
+
+      if (currentVersion < 3)
+      {
+        Puts(string.Format(lang.GetMessage("config.upgrading", this), 3));
+        Config.Remove("permitted_only.group");
+        Config[cvKey] = 3;
         dirty = true;
       }
 
@@ -122,46 +130,34 @@ namespace Oxide.Plugins
         if (!ShowOwnDamage && entity.OwnerID == player.userID) return;
 
         BuildingPrivlidge priv = entity.GetBuildingPrivilege();
-        string[] owners;
+        string[] ownerIDs;
 
         if (priv != null)
         {
-          owners = priv.authorizedPlayers.Select(p => { return p.userid.ToString(); }).ToArray();
+          ownerIDs = priv.authorizedPlayers.Select(p => { return p.userid.ToString(); }).ToArray();
         }
         else
         {
-          owners = new string[] { entity.OwnerID.ToString() };
+          ownerIDs = new string[] { entity.OwnerID.ToString() };
         }
 
         // Filter Owners to those who are registered with PoundBot
         string[] registeredPlayerIDs = permission.GetUsersInGroup((string)PoundBot.Call("API_RegisteredUsersGroup"));
+
         for (int i = 0; i < registeredPlayerIDs.Length; i++)
         {
           registeredPlayerIDs[i] = registeredPlayerIDs[i].Substring(0, registeredPlayerIDs[i].IndexOf(' '));
         }
 
-        owners = owners.Intersect(registeredPlayerIDs).ToArray();
-        if (owners.Length == 0) return;
+        ownerIDs = ownerIDs.Intersect(registeredPlayerIDs).ToArray();
+        if (ownerIDs.Length == 0) return;
 
         if (PermittedOnly)
         {
-          if (!permission.GroupExists(PermittedGroup))
-          {
-            Puts(string.Format(lang.GetMessage("error.permitted_group_missing", this), PermittedGroup));
-            return;
-          }
-          // Filter Owners to those in the permitted group
-
-          string[] groupPlayerIDs = permission.GetUsersInGroup(PermittedGroup);
-          for (int i = 0; i < groupPlayerIDs.Length; i++)
-          {
-            groupPlayerIDs[i] = groupPlayerIDs[i].Substring(0, groupPlayerIDs[i].IndexOf(' '));
-          }
-
-          owners = owners.Intersect(groupPlayerIDs).ToArray();
+          ownerIDs = ownerIDs.Where(ownerID => permission.UserHasPermission(ownerID, PermissionName)).ToArray();
         }
 
-        if (owners.Length == 0) return;
+        if (ownerIDs.Length == 0) return;
 
         string[] words = entity.ShortPrefabName.Split('/');
         string name = words[words.Length - 1].Split('.')[0];
@@ -169,7 +165,7 @@ namespace Oxide.Plugins
         Func<int, string, bool> callback = EntityDeathHandler;
 
         PoundBot.Call(
-          "API_SendEntityDeath", new object[] { this, name, GridPos(entity), owners, callback }
+          "API_SendEntityDeath", new object[] { this, name, GridPos(entity), ownerIDs, callback }
         );
       }
     }
