@@ -9,45 +9,44 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.3")]
+  [Info("Pound Bot Raid Alerts", "MrPoundsign", "2.0.4")]
   [Description("Raid Alerts for use with PoundBot")]
 
-  class PoundBotRaidAlerts : RustPlugin
+  class PoundBotRaidAlerts : CovalencePlugin
   {
     [PluginReference]
     private Plugin PoundBot;
 
-    private Dictionary<string, string> RequestHeaders;
     private bool ShowOwnDamage;
     private bool PermittedOnly;
-    const string RaiAlertsPermission = "poundbotraidalerts.alert";
-    const string RaiAlertsTestPermission = "poundbotraidalerts.test";
+    const string RaidAlertsPermission = "poundbotraidalerts.alert";
+    const string RaidAlertsTestPermission = "poundbotraidalerts.test";
 
     #region Language
     protected override void LoadDefaultMessages()
     {
       lang.RegisterMessages(new Dictionary<string, string>
       {
-        ["config.upgrading"] = "Upgrading config to v{0}"
+        ["config.upgrading"] = "Upgrading config to v{0}",
+        ["config.show_own_damage"] = "debug.show_own_damage is {0}",
+        ["config.permitted_only"] = "permitted_only.enabled is {0}",
+        ["command.raid_alerts_test"] = "rat",
       }, this);
     }
     #endregion
 
     private void Init()
     {
-      permission.RegisterPermission(RaiAlertsPermission, this);
-      permission.RegisterPermission(RaiAlertsTestPermission, this);
+      permission.RegisterPermission(RaidAlertsPermission, this);
+      permission.RegisterPermission(RaidAlertsTestPermission, this);
+
+      AddLocalizedCommand("command.raid_alerts_test", "CommandRaidAlertsTest", RaidAlertsTestPermission);
     }
 
     void OnServerInitialized()
     {
       UpgradeConfig();
-      RequestHeaders = new Dictionary<string, string>
-      {
-        ["X-PoundRaidAlerts-Version"] = Version.ToString()
-      };
-      ShowOwnDamage = (bool)Config["debug.show_own_damage"];
-      PermittedOnly = (bool)Config["permitted_only.enabled"];
+      ApplyConfig();
     }
 
     #region Configuration
@@ -56,6 +55,12 @@ namespace Oxide.Plugins
       Config["config.version"] = 3;
       Config["debug.show_own_damage"] = false;
       Config["permitted_only.enabled"] = false;
+    }
+
+    private void ApplyConfig()
+    {
+      ShowOwnDamage = (bool)Config["debug.show_own_damage"];
+      PermittedOnly = (bool)Config["permitted_only.enabled"];
     }
 
     void UpgradeConfig()
@@ -133,7 +138,7 @@ namespace Oxide.Plugins
 
         int eid = entity.GetInstanceID();
 
-        n = $"[{n}:{eid}]";
+        if (test) n = $"[TEST_{n}:{eid}]";
 
         if (!test && entity.OwnerID == 0)
         {
@@ -190,7 +195,7 @@ namespace Oxide.Plugins
         if (PermittedOnly)
         {
           if (test) Puts($"{n} PermittedOnly is true. Checking perms.");
-          ownerIDs = ownerIDs.Where(ownerID => permission.UserHasPermission(ownerID, RaiAlertsPermission)).ToArray();
+          ownerIDs = ownerIDs.Where(ownerID => permission.UserHasPermission(ownerID, RaidAlertsPermission)).ToArray();
         }
 
         if (ownerIDs.Length == 0)
@@ -199,11 +204,7 @@ namespace Oxide.Plugins
           return;
         }
 
-        if (test)
-        {
-          Puts($"{n} Sending entity death to PoundBot");
-          n = "TEST_" + n;
-        }
+        if (test) Puts($"{n} Sending entity death to PoundBot");
 
         Func<int, string, bool> callback = EntityDeathHandler;
 
@@ -237,20 +238,60 @@ namespace Oxide.Plugins
       return empty + Convert.ToChar(65 + num2).ToString();
     }
 
-    #region Commands
-    [ChatCommand("rat"), Permission(RaiAlertsTestPermission)]
-    private void CmdRat(BasePlayer p, string command, string[] args)
+    #region Helpers
+    private void AddLocalizedCommand(string key, string command, string perm = null)
     {
+      foreach (var language in lang.GetLanguages(this))
+      {
+        var messages = lang.GetMessages(language, this);
+        foreach (var message in messages.Where(m => m.Key.Equals(key)))
+          if (!string.IsNullOrEmpty(message.Value)) AddCovalenceCommand(message.Value, command, perm);
+      }
+    }
+    #endregion
+
+    #region Commands
+    //[Command("rat"), Permission(RaidAlertsTestPermission)]
+    private void CommandRaidAlertsTest(IPlayer iplayer, string command, string[] args)
+    {
+      BasePlayer p = iplayer.Object as BasePlayer;
+      // RaidAlertsTestPermission
+
       RaycastHit raycastHit;
       BaseEntity targetEntity;
 
       bool flag = Physics.Raycast(p.eyes.HeadRay(), out raycastHit, 500f, Rust.Layers.Solid);
-      targetEntity = flag? raycastHit.GetEntity() : null;
+      targetEntity = flag ? raycastHit.GetEntity() : null;
 
       Puts($"targetEntity is {targetEntity}");
 
-      if (targetEntity != null ) SendEntityDeath(targetEntity, p, true);
+      if (targetEntity != null) SendEntityDeath(targetEntity, p, true);
 
+    }
+
+    [Command("pb.ra.show_own_damage")]
+    private void ConsoleCommandShowOwnDamage(IPlayer player, string command, string[] args)
+    {
+      if (args.Length == 1)
+      {
+        Config["debug.show_own_damage"] = (args[0] == "1" || args[0] == "true");
+        SaveConfig();
+        ApplyConfig();
+      }
+      Puts(string.Format(lang.GetMessage("config.show_own_damage", this), ShowOwnDamage));
+    }
+
+    [Command("pb.ra.permitted_only")]
+    private void ConsoleCommandPermittedOnly(IPlayer player, string command, string[] args)
+    {
+      if (args.Length == 1)
+      {
+        Config["permitted_only.enabled"] = (args[0] == "1" || args[0] == "true");
+        SaveConfig();
+        ApplyConfig();
+      }
+
+      Puts(string.Format(lang.GetMessage("config.permitted_only", this), PermittedOnly));
     }
     #endregion
   }

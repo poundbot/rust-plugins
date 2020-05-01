@@ -7,13 +7,13 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Events", "MrPoundsign", "2.0.2")]
+  [Info("Pound Bot Events", "MrPoundsign", "2.0.3")]
   [Description("Relays events for PoundBot")]
 
   class PoundBotEvents : CovalencePlugin
   {
     [PluginReference]
-    private Plugin PoundBot, Clans, DeathNotes;
+    private Plugin PoundBot, Clans, DeathNotes; //, Inbound;
 
     protected string EventPlayerConnectionsChannel;
     protected string EventPlayerConnectionsColor;
@@ -23,57 +23,43 @@ namespace Oxide.Plugins
     protected string EventDeathNotesColor;
     protected string EventBanKickChannel;
     protected string EventBanKickColor;
+    protected string EventClanCreateChannel;
+    protected string EventClanCreateColor;
 
-    public static string StripColor(string input) => Regex.Replace(input, "</{0,1}color(=[^>]*|)>", string.Empty);
+    const string PermNoConnectEvents = "poundbotevents.noconnectevents";
+    const string PermNoEvents = "poundbotevents.noevents";
 
+    public static string StripTags(string input) => Regex.Replace(input, "</{0,1}(color|size|i|b)(=[^>]*|)>", string.Empty);
 
     #region Configuration
     protected override void LoadDefaultConfig()
     {
       LogWarning("Creating a new configuration file");
       Config["config.version"] = 0;
+
       Config["events.default.channel"] = "";
+
+      Config["events.bankick.channel"] = "default";
+      Config["events.bankick.color"] = "";
+
+      Config["events.clancreate.channel"] = "default";
+      Config["events.clancreate.color"] = "";
 
       Config["events.connected.channel"] = "default";
       Config["events.connected.color"] = "";
 
-      Config["events.disconnected.channel"] = "default";
-      Config["events.disconnected.color"] = "";
-
       Config["events.deathnotes.channel"] = "default";
       Config["events.deathnotes.color"] = "";
 
-      Config["events.bankick.channel"] = "default";
-      Config["events.bankick.color"] = "";
+      Config["events.disconnected.channel"] = "default";
+      Config["events.disconnected.color"] = "";
     }
-    #endregion
-
-    #region Oxide Hooks
-    protected override void LoadDefaultMessages()
-    {
-      lang.RegisterMessages(
-        new Dictionary<string, string>
-        {
-          ["user.clan_tag"] = "[{0}]",
-          ["dateformat"] = "[HH:mm]",
-          ["events.connected.prefix"] = ":arrow_right::video_game: ",
-          ["events.connected.message"] = " has joined the server",
-          ["events.disconnected.prefix"] = ":x::video_game: ",
-          ["events.disconnected.message"] = " has left the server",
-          ["events.deathnotes.prefix"] = ":skull_crossbones: ",
-          ["events.banned.prefix"] = ":hammer: ",
-          ["events.banned.message"] = " has been banned",
-          ["events.kicked.prefix"] = ":boot: ",
-          ["events.kicked.message"] = " has been kicked",
-        }, this);
-    }
-    #endregion
 
     private string ChannelID(string channel_name)
     {
       string channelID = (string)Config[$"events.{channel_name}.channel"];
 
-      if (channelID == "default")
+      if (channelID == null || channelID == "default")
       {
         return (string)Config["events.default.channel"];
       }
@@ -84,21 +70,22 @@ namespace Oxide.Plugins
     protected string ChannelColor(string channel_name)
     {
       string channelColor = (string)Config[$"events.{channel_name}.color"];
-      if (channelColor.Length == 0)
+
+      if (channelColor == null || channelColor.Length == 0)
       {
         return null;
       }
 
       return channelColor;
     }
+    #endregion
 
-    void OnInboundBroadcast(Dictionary<string, string> data)
-    {
-      Puts($"OnInboundBroadcast: {data["type"]} {data["message"]}");
-    }
-
+    #region Oxide Hooks
     void Init()
     {
+      permission.RegisterPermission(PermNoConnectEvents, this);
+      permission.RegisterPermission(PermNoEvents, this);
+
       EventPlayerConnectionsChannel = ChannelID("connected");
       EventPlayerConnectionsColor = ChannelColor("connected");
 
@@ -110,35 +97,49 @@ namespace Oxide.Plugins
 
       EventBanKickChannel = ChannelID("bankick");
       EventBanKickColor = ChannelColor("bankick");
+
+      EventClanCreateChannel = ChannelID("clancreate");
+      EventClanCreateColor = ChannelColor("clancreate");
+    }
+
+    protected override void LoadDefaultMessages()
+    {
+      lang.RegisterMessages(
+        new Dictionary<string, string>
+        {
+          ["user.clan_tag"] = "[{0}]",
+          ["dateformat"] = "[HH:mm]",
+          ["events.banned.prefix"] = ":hammer: ",
+          ["events.banned.message"] = " has been banned",
+          ["events.clancreate.prefix"] = ":arrow_right::busts_in_silhouette: ",
+          ["events.clancreate.message"] = "Clan {clan} ({clan_tag}) has been created by {player}",
+          ["events.connected.prefix"] = ":arrow_right::video_game: ",
+          ["events.connected.message"] = " has joined the server",
+          ["events.deathnotes.prefix"] = ":skull_crossbones: ",
+          ["events.disconnected.prefix"] = ":x::video_game: ",
+          ["events.disconnected.message"] = " has left the server",
+          ["events.kicked.prefix"] = ":boot: ",
+          ["events.kicked.message"] = " has been kicked",
+        }, this);
+    }
+
+    private bool DisabledNotification(string playerID, string perm)
+    {
+      return permission.UserHasPermission(playerID, perm);
     }
 
     private void OnUserConnected(IPlayer player)
     {
-      if (EventPlayerConnectionsChannel.Length == 0) return;
+      if (EventPlayerConnectionsChannel.Length == 0 || DisabledNotification(player.Id, PermNoConnectEvents)) return;
 
       SendToPoundBot(player, "connected", EventPlayerConnectionsChannel, EventPlayerConnectionsColor);
     }
 
     private void OnUserDisconnected(IPlayer player)
     {
-      if (EventDisconnectedChannel.Length == 0) return;
+      if (EventPlayerConnectionsChannel.Length == 0 || DisabledNotification(player.Id, PermNoConnectEvents)) return;
 
       SendToPoundBot(player, "disconnected", EventPlayerConnectionsChannel, EventPlayerConnectionsColor);
-    }
-
-    void OnDeathNotice(Dictionary<string, object> data, string message)
-    {
-      if (EventDeathNotesChannel.Length == 0) return;
-      KeyValuePair<string, bool>[] message_parts = new KeyValuePair<string, bool>[2]
-      {
-        new KeyValuePair<string, bool>(lang.GetMessage("events.deathnotes.prefix", this), false),
-        new KeyValuePair<string, bool>(StripColor(message), true),
-      };
-
-      PoundBot.Call(
-        "API_SendChannelMessage",
-        new object[] { this, EventDeathNotesChannel, message_parts, EventDeathNotesColor }
-      );
     }
 
     void OnUserBanned(string name, string id, string address, string reason)
@@ -154,8 +155,42 @@ namespace Oxide.Plugins
 
       SendToPoundBot(player, "kicked", EventBanKickChannel, EventBanKickColor);
     }
+    #endregion
 
-    void SendToPoundBot(IPlayer player, string eventType, string channel, string embed_color = null)
+    #region DeathNotes Hooks
+    void OnDeathNotice(Dictionary<string, object> data, string message)
+    {
+      if (EventDeathNotesChannel.Length == 0) return;
+      KeyValuePair<string, bool>[] message_parts = new KeyValuePair<string, bool>[2]
+      {
+        new KeyValuePair<string, bool>(lang.GetMessage("events.deathnotes.prefix", this), false),
+        new KeyValuePair<string, bool>(StripTags(message), true),
+      };
+
+      PoundBot.Call(
+        "API_SendChannelMessage",
+        new object[] { this, EventDeathNotesChannel, message_parts, EventDeathNotesColor }
+      );
+    }
+    #endregion
+
+    #region Inbound Hooks
+    //void OnInboundBroadcast(Dictionary<string, string> data)
+    //{
+    //  Puts($"OnInboundBroadcast: {data["type"]} {data["message"]}");
+    //}
+    #endregion
+
+    #region Clan Hooks
+    //void OnClanCreate(string player, string id, string address, string reason)
+    //{
+    //  if (EventClanCreateChannel.Length == 0) return;
+
+    //  SendToPoundBot(player, "clancreate", EventClanCreateChannel, EventClanCreateColor);
+    //}
+    #endregion
+
+    void SendToPoundBot(IPlayer player, string eventType, string chan, string color = null)
     {
       string playerName = player.Name;
       var clanTag = (string)Clans?.Call("GetClanOf", player);
@@ -164,12 +199,12 @@ namespace Oxide.Plugins
         playerName = $"[{clanTag}]{playerName}";
       }
 
-      SendToPoundBot(playerName, eventType, channel, embed_color);
+      SendToPoundBot(player.Id, playerName, eventType, chan, color);
     }
 
-    void SendToPoundBot(string playerName, string eventType, string channel, string embed_color = null)
+    void SendToPoundBot(string playerID, string playerName, string eventType, string chan, string color = null)
     {
-      if (channel.Length == 0)
+      if (chan.Length == 0 || permission.UserHasPermission(playerID, PermNoEvents))
       {
         Puts("Channel not defined. Please set your channel names in config/PoundBotEvents.json.");
         return;
@@ -181,7 +216,7 @@ namespace Oxide.Plugins
       message_parts[2] = new KeyValuePair<string, bool>(lang.GetMessage($"events.{eventType}.message", this), false);
       PoundBot.Call(
         "API_SendChannelMessage",
-        new object[] { this, channel, message_parts, embed_color }
+        new object[] { this, chan, message_parts, color }
       );
     }
   }
