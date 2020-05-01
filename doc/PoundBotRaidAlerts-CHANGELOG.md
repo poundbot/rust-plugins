@@ -7,33 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 2.0.4
 
-### Changes
-
+### Changed
 - Removed entity ID from destroyed objects when not using `/rat`
-- Fixed and localized `/rat`
+- Localized `/rat` command
+
+### Fixed
+- `/rat` command now works
 
 ## 2.0.3
 
-### Changes
-
-- Changed permission name to `poundbotraidalerts.alert` so it works
-- Added `/rat` command to test raid alerts.
+### Added
+- `/rat` command to test raid alerts.
   - Requires `poundbotraidalerts.test` permission to use.
+
+### Changed
+- Changed permission name to `poundbotraidalerts.alert` so it works
 
 ## 2.0.2
 
-### Changes
-
+### Added
  - New permissions system, permitted users are now controlled by the `poundbot.raidalerts` permission.
 
 ## 2.0.1
 
-### Changes
-
+### Changed
 - Removed debug location message
 
 ## 2.0.0
 
-### Changes
-
+### Changed
 - Uses new PoundBot 2.0 API

@@ -7,20 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 2.0.3
 
-### Changes
-
-- Added the ability to disable notifications for specific users or groups via permissions
+### Added
+- Disable notifications for specific users or groups via permissions
   - `poundbotevents.noconnectevents` disables connect/disconnect events
   - `poundbotevents.noevents` disables all events
 
 ## 2.0.2
 
 ### Changes
-
 - player disconnect and player connect are different messages now
 
 ## 2.0.0
 
 ### Changes
-
 - Uses new PoundBot 2.0 API
