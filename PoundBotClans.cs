@@ -3,13 +3,12 @@
 
 using System.Collections.Generic;
 using System;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-  [Info("Pound Bot Clans", "MrPoundsign", "2.0.0")]
+  [Info("Pound Bot Clans", "MrPoundsign", "2.0.1")]
   [Description("Clans support for PoundBot")]
 
   class PoundBotClans : CovalencePlugin
@@ -23,6 +22,7 @@ namespace Oxide.Plugins
       lang.RegisterMessages(new Dictionary<string, string>
       {
         ["sending_clans"] = "Sending all clans to PoundBot",
+        ["sending_clans_tag"] = " + [{0}]",
         ["sending_clan"] = "Sending clan {0} to PoundBot",
         ["sending_clan_delete"] = "Sending clan delete for {0} to PoundBot",
       }, this);
@@ -44,6 +44,7 @@ namespace Oxide.Plugins
       List<JObject> clans = new List<JObject>();
       foreach (string ctag in clan_tags)
       {
+        Puts(string.Format(lang.GetMessage("sending_clans_tag", this), ctag));
         clans.Add((JObject)Clans.Call("GetClan", ctag));
       }
 
@@ -55,13 +56,17 @@ namespace Oxide.Plugins
     #region Clans Hooks
     void OnClanCreate(string tag)
     {
-      var clan = (JObject)Clans.Call("GetClan", tag);
+      timer.Once(1f, () =>
+      {
+        SendClans();
+        //var clan = (JObject)Clans.Call("GetClan", tag);
 
-      Puts(lang.GetMessage("sending_clans", this));
+        //Puts(string.Format(lang.GetMessage("sending_clan", this), tag));
 
-      Func<int, string, bool> callback = AcceptedHandler;
+        //Func<int, string, bool> callback = AcceptedHandler;
 
-      PoundBot.Call("API_SendClan", new object[] { this, tag, clan, callback });
+        //PoundBot.Call("API_SendClan", new object[] { this, tag, clan, callback });
+      });
     }
 
     void OnClanUpdate(string tag) => OnClanCreate(tag);
