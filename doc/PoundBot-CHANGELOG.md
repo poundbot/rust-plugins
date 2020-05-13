@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.0.1
+
+### Added
+- Added full request body to DebugURI
+
+### Fixed
+- Fixed lang file for `/pbreg` usage. In `lang/en/PoundBot.json`, `usage.pbreg` should now be:
+
+  `Usage: {0} \"<discord name>\"\n Example: {0} \"Fancy Guy#8080\"`
+
 ## 2.0.0
 
 ### Added
